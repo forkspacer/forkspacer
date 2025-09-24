@@ -1,0 +1,19 @@
+apiVersion: batch.environment.sh/v1
+kind: Workspace
+metadata:
+  name: default2
+  namespace: default
+
+spec:
+  type: kubernetes
+  from:
+    name: default
+    # namespace: default
+  # connection:
+  #   type: in-cluster
+  #   secretReference:
+  #     name: kind-secret
+  # autoHibernation:
+  #   enabled: false
+  #   schedule: "0 42 18 * * *"
+  #   wakeSchedule: "0 44 18 * * *"

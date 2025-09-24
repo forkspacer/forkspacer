@@ -1,0 +1,9 @@
+apiVersion: batch.environment.sh/v1
+kind: Module
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: module-sample
+spec:
+  # TODO(user): Add fields here

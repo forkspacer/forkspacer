@@ -1,0 +1,83 @@
+apiVersion: batch.environment.sh/v1
+kind: Module
+metadata:
+  name: redis
+  namespace: default
+spec:
+  source:
+    raw:
+      kind: Helm
+      metadata:
+        name: redis
+        version: "1.0.0"
+        supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
+        author: "platform-team"
+        description: "Redis in-memory data store"
+        category: "database"
+        resource_usage:
+          cpu: "200m"
+          memory: "256Mi"
+
+      config:
+        - type: option
+          name: "Redis Version"
+          alias: "version"
+          spec:
+            editable: true
+            required: false
+            default: "21.2.9"
+            values:
+              - "21.2.9"
+              - "21.2.7"
+              - "21.2.6"
+
+        - type: integer
+          name: "Replica Count"
+          alias: "replicaCount"
+          spec:
+            editable: true
+            required: false
+            default: 1
+            min: 0
+            max: 5
+
+      spec:
+        namespace: default
+        repo: https://charts.bitnami.com/bitnami
+        chartName: redis
+        version: "{{.config.version}}"
+
+        values:
+          - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
+          - raw:
+              replica:
+                replicaCount: "{{.config.replicaCount}}"
+          # - configMap:
+          #     namespace: default
+          #     name: redis-values
+
+        outputs:
+          - name: "Redis Hostname"
+            value: "redis-master.default"
+          - name: "Redis Username"
+            value: "default"
+          - name: "Redis Password"
+            valueFrom:
+              secret:
+                name: "{{.releaseName}}"
+                key: redis-password
+                namespace: default
+          - name: "Redis Port"
+            value: 6379
+
+        cleanup:
+          removeNamespace: false
+          removePVCs: true
+
+  workspace:
+    name: default
+    namespace: default
+
+  config:
+    version: 21.2.7
+    replicaCount: 0

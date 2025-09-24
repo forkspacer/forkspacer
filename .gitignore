@@ -1,0 +1,151 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/*
+dist/*
+build/*
+out/*
+Dockerfile.cross
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+*.cover
+coverage.html
+coverage.xml
+coverage.txt
+*.coverprofile
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+!vendor/**/zz_generated.*
+
+# Editor and IDE paraphernalia
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.tmp
+*.bak
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.envrc
+
+# Log files
+*.log
+logs/
+log/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+
+# Personal notes and TODO files
+TODO
+TODO.md
+NOTES
+NOTES.md
+.notes/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Local configuration overrides
+config.local.yml
+config.local.yaml
+config.local.json
+local.properties
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificate files (keep templates, ignore actual certs)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+# But allow example/template certificates
+!*example*
+!*template*
+!*sample*
+
+# Docker
+.dockerignore.local
+
+# Terraform (if used for infrastructure)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes secrets and local configs
+*secret*.yaml
+*secret*.yml
+kubeconfig
+.kubeconfig
+
+# GoReleaser
+goreleaser.yml.local
+
+# Air (live reload tool)
+.air.toml.local
+
+# Performance profiling
+*.prof
+cpu.out
+mem.out
+trace.out
+
+# Generated documentation
+docs/generated/
+
+# Local scripts
+scripts/local/
+*.local.sh
+
+# Dev containers
+.devcontainer/
