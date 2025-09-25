@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: CLA Assistant
-        uses: cla-assistant/github-action@v2
+        uses: contributor-assistant/github-action@v2.6.1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-signatures: 'signatures/cla.json'
