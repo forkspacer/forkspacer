@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
-	"github.com/environment.sh/operator/pkg/services"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/services"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"

@@ -1,4 +1,4 @@
-module github.com/environment.sh/operator
+module github.com/forkspacer/forkspacer
 
 go 1.24.5
 

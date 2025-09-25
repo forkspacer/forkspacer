@@ -26,7 +26,7 @@ import (
 	"net/http"
 	"time"
 
-	managerBase "github.com/environment.sh/operator/pkg/manager/base"
+	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,12 +39,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
-	"github.com/environment.sh/operator/pkg/manager"
-	"github.com/environment.sh/operator/pkg/resources"
-	"github.com/environment.sh/operator/pkg/services"
-	"github.com/environment.sh/operator/pkg/types"
-	"github.com/environment.sh/operator/pkg/utils"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/manager"
+	"github.com/forkspacer/forkspacer/pkg/resources"
+	"github.com/forkspacer/forkspacer/pkg/services"
+	"github.com/forkspacer/forkspacer/pkg/types"
+	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
 var moduleFinalizers = struct {

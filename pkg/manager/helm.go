@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/environment.sh/operator/pkg/manager/base"
-	"github.com/environment.sh/operator/pkg/resources"
-	"github.com/environment.sh/operator/pkg/services"
+	"github.com/forkspacer/forkspacer/pkg/manager/base"
+	"github.com/forkspacer/forkspacer/pkg/resources"
+	"github.com/forkspacer/forkspacer/pkg/services"
 	"github.com/go-logr/logr"
 	"github.com/go-viper/mapstructure/v2"
 	orderedmap "github.com/wk8/go-ordered-map/v2"

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/environment.sh/operator/pkg/types"
+	"github.com/forkspacer/forkspacer/pkg/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/robfig/cron/v3"
 )
 

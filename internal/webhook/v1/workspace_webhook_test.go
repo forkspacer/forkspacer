@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	// TODO (user): Add any additional imports if needed
 )
 

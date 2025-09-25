@@ -39,7 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

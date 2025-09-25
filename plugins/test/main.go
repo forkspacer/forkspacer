@@ -7,7 +7,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	"github.com/environment.sh/operator/pkg/manager/base"
+	"github.com/forkspacer/forkspacer/pkg/manager/base"
 )
 
 var _ base.NewCustomManagerT = NewManager

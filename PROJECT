@@ -7,7 +7,7 @@ domain: environment.sh
 layout:
 - go.kubebuilder.io/v4
 projectName: operator
-repo: github.com/environment.sh/operator
+repo: github.com/forkspacer/forkspacer
 resources:
 - api:
     crdVersion: v1
@@ -16,7 +16,7 @@ resources:
   domain: environment.sh
   group: batch
   kind: Workspace
-  path: github.com/environment.sh/operator/api/v1
+  path: github.com/forkspacer/forkspacer/api/v1
   version: v1
   webhooks:
     defaulting: true
@@ -29,7 +29,7 @@ resources:
   domain: environment.sh
   group: batch
   kind: Module
-  path: github.com/environment.sh/operator/api/v1
+  path: github.com/forkspacer/forkspacer/api/v1
   version: v1
   webhooks:
     defaulting: true

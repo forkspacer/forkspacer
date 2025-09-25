@@ -28,8 +28,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
-	"github.com/environment.sh/operator/pkg/utils"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
 var _ = Describe("Module Controller", func() {
