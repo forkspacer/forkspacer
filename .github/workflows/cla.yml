@@ -23,4 +23,5 @@ jobs:
         with:
           path-to-signatures: 'signatures/version1/cla.json'
           path-to-document: 'CLA.md'
+          branch: 'main'
           allowlist: 'bot*,dependabot[bot]'
