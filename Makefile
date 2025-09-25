@@ -4,10 +4,10 @@ GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Linker flags
-LDFLAGS := -ldflags "-X github.com/environment.sh/operator/pkg/version.Version=$(VERSION) -X github.com/environment.sh/operator/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/environment.sh/operator/pkg/version.BuildDate=$(BUILD_DATE)"
+LDFLAGS := -ldflags "-X github.com/forkspacer/forkspacer/pkg/version.Version=$(VERSION) -X github.com/forkspacer/forkspacer/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/forkspacer/forkspacer/pkg/version.BuildDate=$(BUILD_DATE)"
 
 # Image URL to use all building/pushing image targets
-IMG ?= git.aykhans.me/aykhans/operator:$(VERSION)
+IMG ?= ghcr.io/forkspacer/forkspacer:$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

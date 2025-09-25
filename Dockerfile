@@ -26,9 +26,9 @@ COPY pkg/ pkg/
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
-    -ldflags "-X github.com/environment.sh/operator/pkg/version.Version=${VERSION} \
-              -X github.com/environment.sh/operator/pkg/version.GitCommit=${GIT_COMMIT} \
-              -X github.com/environment.sh/operator/pkg/version.BuildDate=${BUILD_DATE}" \
+    -ldflags "-X github.com/forkspacer/forkspacer/pkg/version.Version=${VERSION} \
+              -X github.com/forkspacer/forkspacer/pkg/version.GitCommit=${GIT_COMMIT} \
+              -X github.com/forkspacer/forkspacer/pkg/version.BuildDate=${BUILD_DATE}" \
     -a -o manager cmd/main.go
 
 RUN mkdir -p /internal-data && \

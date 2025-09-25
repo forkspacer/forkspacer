@@ -28,7 +28,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 )
 
 var _ = Describe("Workspace Controller", func() {

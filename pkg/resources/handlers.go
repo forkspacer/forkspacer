@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/environment.sh/operator/pkg/version"
+	"github.com/forkspacer/forkspacer/pkg/version"
 )
 
 func HandleResource(

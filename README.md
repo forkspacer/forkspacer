@@ -55,7 +55,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-ca
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 
 # Deploy Forkspacer
-kubectl apply -f ./dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/forkspacer/forkspacer/main/dist/install.yaml
 ```
 
 ### Basic Usage

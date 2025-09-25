@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 )
 
 // nolint:unused

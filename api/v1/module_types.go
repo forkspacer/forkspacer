@@ -99,6 +99,7 @@ type ModuleStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=mo
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.lastActivity",name=Last Activity,type=string,format=date-time
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string

@@ -35,9 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	batchv1 "github.com/environment.sh/operator/api/v1"
-	"github.com/environment.sh/operator/pkg/types"
-	"github.com/environment.sh/operator/pkg/utils"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/types"
+	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
 )

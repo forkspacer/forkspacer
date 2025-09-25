@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/environment.sh/operator/pkg/resources"
+	"github.com/forkspacer/forkspacer/pkg/resources"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
