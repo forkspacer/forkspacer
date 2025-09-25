@@ -1,19 +1,26 @@
-name: CLA Assistant
-
+name: "CLA Assistant"
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
   issue_comment:
     types: [created]
+  pull_request_target:
+    types: [opened,closed,synchronize,reopened]
+
+# explicitly configure permissions, in case your GITHUB_TOKEN workflow permissions are set to read-only in repository settings
+permissions:
+  actions: write
+  contents: write # this can be 'read' if the signatures are in remote repository
+  pull-requests: write
+  statuses: write
 
 jobs:
-  cla:
+  CLAAssistant:
     runs-on: ubuntu-latest
     steps:
-      - name: CLA Assistant
+      - name: "CLA Assistant"
         uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-signatures: 'signatures/cla.json'
-          path-to-cla-document: 'CLA.md'
+          path-to-signatures: 'signatures/version1/cla.json'
+          path-to-document: 'CLA.md'
           allowlist: 'bot*,dependabot[bot]'
