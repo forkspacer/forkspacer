@@ -92,6 +92,8 @@ spec:
                     - in-cluster
                     - kubeconfig
                     type: string
+                required:
+                - type
                 type: object
               from:
                 description: '*optional'
@@ -103,6 +105,7 @@ spec:
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               hibernated:
                 default: false

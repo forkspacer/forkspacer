@@ -55,12 +55,11 @@ type WorkspaceConnectionSecretReference struct {
 }
 
 type WorkspaceConnection struct {
-	// +optional
 	// +kubebuilder:default=local
 	Type WorkspaceConnectionType `json:"type"`
 
 	// +optional
-	SecretReference WorkspaceConnectionSecretReference `json:"secretReference"`
+	SecretReference *WorkspaceConnectionSecretReference `json:"secretReference,omitempty"`
 }
 
 type WorkspaceAutoHibernation struct {
@@ -79,7 +78,6 @@ type WorkspaceAutoHibernation struct {
 type WorkspaceFromReference struct {
 	Name string `json:"name"`
 
-	// +optional
 	// +kubebuilder:default=default
 	Namespace string `json:"namespace"`
 }

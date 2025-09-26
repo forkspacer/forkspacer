@@ -299,6 +299,14 @@ func validateWorkspaceSecretReference(ctx context.Context, c client.Client, conn
 		return nil
 	}
 
+	if connection.SecretReference == nil {
+		allErrs = append(allErrs, field.Required(
+			field.NewPath("spec").Child("connection").Child("secretReference"),
+			"secretReference is required when connection type is Kubeconfig",
+		))
+		return allErrs
+	}
+
 	if connection.SecretReference.Name == "" {
 		allErrs = append(allErrs, field.Required(
 			field.NewPath("spec").Child("connection").Child("secretReference").Child("name"),
