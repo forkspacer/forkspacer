@@ -309,7 +309,7 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 
 	metaData := make(managerBase.MetaData)
 
-	var configMap map[string]any
+	configMap := make(map[string]any)
 	if module.Spec.Config != nil && module.Spec.Config.Raw != nil {
 		if err := json.Unmarshal(module.Spec.Config.Raw, &configMap); err != nil {
 			return fmt.Errorf("failed to unmarshal module config: %v", err)
@@ -421,7 +421,7 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 		}
 	}
 
-	return resources.HandleResource(moduleData, nil,
+	return resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
 			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
 			if !ok || releaseName == "" {
@@ -526,7 +526,7 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 		}
 	}
 
-	err = resources.HandleResource(moduleData, nil,
+	err = resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
 			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
 			if !ok || releaseName == "" {
@@ -639,7 +639,7 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 		}
 	}
 
-	err = resources.HandleResource(moduleData, nil,
+	err = resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
 			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
 			if !ok || releaseName == "" {
