@@ -878,7 +878,7 @@ webhooks:
     service:
       name: operator-webhook-service
       namespace: operator-system
-      path: /mutate-batch-environment-sh-v1-module
+      path: /mutate-batch-forkspacer-com-v1-module
   failurePolicy: Fail
   name: mmodule-v1.kb.io
   rules:
@@ -898,7 +898,7 @@ webhooks:
     service:
       name: operator-webhook-service
       namespace: operator-system
-      path: /mutate-batch-environment-sh-v1-workspace
+      path: /mutate-batch-forkspacer-com-v1-workspace
   failurePolicy: Fail
   name: mworkspace-v1.kb.io
   rules:
@@ -926,7 +926,7 @@ webhooks:
     service:
       name: operator-webhook-service
       namespace: operator-system
-      path: /validate-batch-environment-sh-v1-module
+      path: /validate-batch-forkspacer-com-v1-module
   failurePolicy: Fail
   name: vmodule-v1.kb.io
   rules:
@@ -946,7 +946,7 @@ webhooks:
     service:
       name: operator-webhook-service
       namespace: operator-system
-      path: /validate-batch-environment-sh-v1-workspace
+      path: /validate-batch-forkspacer-com-v1-workspace
   failurePolicy: Fail
   name: vworkspace-v1.kb.io
   rules:

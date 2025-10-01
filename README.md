@@ -261,7 +261,7 @@ spec:
 
 ### Local Development
 ```bash
-git clone https://github.com/environment-sh/forkspacer.git
+git clone https://github.com/forkspacer/forkspacer.git
 cd forkspacer
 
 # Install CRDs and run locally
@@ -327,5 +327,5 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 ## Community
 
 - **Documentation**: [docs.forkspacer.io](https://docs.forkspacer.io)
-- **Issues**: [GitHub Issues](https://github.com/environment-sh/forkspacer/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/environment-sh/forkspacer/discussions)
+- **Issues**: [GitHub Issues](https://github.com/forkspacer/forkspacer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/forkspacer/forkspacer/discussions)
