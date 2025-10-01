@@ -281,6 +281,8 @@ spec:
                     - in-cluster
                     - kubeconfig
                     type: string
+                required:
+                - type
                 type: object
               from:
                 description: '*optional'
@@ -292,6 +294,7 @@ spec:
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               hibernated:
                 default: false
@@ -756,7 +759,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.0
+        image: ghcr.io/forkspacer/forkspacer:v0.1.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
