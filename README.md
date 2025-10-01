@@ -78,10 +78,6 @@ spec:
     enabled: true
     schedule: "0 18 * * *"      # Sleep at 6 PM daily
     wakeSchedule: "0 8 * * *"   # Wake at 8 AM daily
-  resourceQuota:
-    cpu: "4"
-    memory: "8Gi"
-    storage: "50Gi"
 ```
 
 #### Deploying Applications
@@ -92,33 +88,70 @@ Deploy services within the workspace:
 apiVersion: batch.environment.sh/v1
 kind: Module
 metadata:
-  name: backend-service
-  namespace: development
+  name: redis
+  namespace: default
 spec:
-  workspace:
-    name: feature-branch-env
-    namespace: development
   source:
     raw:
       kind: Helm
       metadata:
-        name: backend-api
-        version: "2.1.0"
-        description: "Backend API service"
-        category: "application"
+        name: redis
+        version: "1.0.0"
+        supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
+        author: "platform-team"
+        description: "Redis in-memory data store"
+        category: "database"
+
+      config:
+        - type: option
+          name: "Redis Version"
+          alias: "version"
+          spec:
+            editable: true
+            required: false
+            default: "21.2.9"
+            values:
+              - "21.2.9"
+              - "21.2.7"
+              - "21.2.6"
+
       spec:
-        namespace: development
-        repo: https://charts.example.com/
-        chartName: backend-api
-        version: "2.1.0"
+        namespace: default
+        repo: https://charts.bitnami.com/bitnami
+        chartName: redis
+        version: "{{.config.version}}"
+
         values:
+          - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
           - raw:
-              image:
-                tag: "feature-xyz-123"
-              resources:
-                requests:
-                  cpu: "200m"
-                  memory: "512Mi"
+              replica:
+                replicaCount: "{{.config.replicaCount}}"
+
+        outputs:
+          - name: "Redis Hostname"
+            value: "redis-master.default"
+          - name: "Redis Username"
+            value: "default"
+          - name: "Redis Password"
+            valueFrom:
+              secret:
+                name: "{{.releaseName}}"
+                key: redis-password
+                namespace: default
+          - name: "Redis Port"
+            value: 6379
+
+        cleanup:
+          removeNamespace: false
+          removePVCs: true
+
+  workspace:
+    name: default
+    namespace: default
+
+  config:
+    version: 21.2.7
+
 ```
 
 #### Managing Workspace Lifecycle
