@@ -1,7 +1,7 @@
 # This rule is not used by the project operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to batch.environment.sh resources.
+# Grants read-only access to batch.forkspacer.com resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -14,7 +14,7 @@ metadata:
   name: workspace-viewer-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces
   verbs:
@@ -22,7 +22,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces/status
   verbs:

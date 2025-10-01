@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: workspaces.batch.environment.sh
+  name: workspaces.batch.forkspacer.com
 spec:
-  group: batch.environment.sh
+  group: batch.forkspacer.com
   names:
     kind: Workspace
     listKind: WorkspaceList

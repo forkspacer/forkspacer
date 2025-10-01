@@ -1,6 +1,6 @@
 package types
 
-const ModuleBaseAnnotationKey = "environment.sh"
+const ModuleBaseAnnotationKey = "forkspacer.com"
 
 var ModuleAnnotationKeys = struct {
 	Resource,

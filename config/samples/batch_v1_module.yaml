@@ -1,4 +1,4 @@
-apiVersion: batch.environment.sh/v1
+apiVersion: batch.forkspacer.com/v1
 kind: Module
 metadata:
   labels:

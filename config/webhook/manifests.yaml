@@ -15,7 +15,7 @@ webhooks:
   name: mmodule-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -35,7 +35,7 @@ webhooks:
   name: mworkspace-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -61,7 +61,7 @@ webhooks:
   name: vmodule-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -81,7 +81,7 @@ webhooks:
   name: vworkspace-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:

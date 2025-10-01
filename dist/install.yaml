@@ -12,9 +12,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: modules.batch.environment.sh
+  name: modules.batch.forkspacer.com
 spec:
-  group: batch.environment.sh
+  group: batch.forkspacer.com
   names:
     kind: Module
     listKind: ModuleList
@@ -193,9 +193,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: workspaces.batch.environment.sh
+  name: workspaces.batch.forkspacer.com
 spec:
-  group: batch.environment.sh
+  group: batch.forkspacer.com
   names:
     kind: Workspace
     listKind: WorkspaceList
@@ -509,13 +509,13 @@ metadata:
   name: operator-module-admin-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules
   verbs:
   - '*'
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules/status
   verbs:
@@ -530,7 +530,7 @@ metadata:
   name: operator-module-editor-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules
   verbs:
@@ -542,7 +542,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules/status
   verbs:
@@ -557,7 +557,7 @@ metadata:
   name: operator-module-viewer-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules
   verbs:
@@ -565,7 +565,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - modules/status
   verbs:
@@ -580,13 +580,13 @@ metadata:
   name: operator-workspace-admin-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces
   verbs:
   - '*'
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces/status
   verbs:
@@ -601,7 +601,7 @@ metadata:
   name: operator-workspace-editor-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces
   verbs:
@@ -613,7 +613,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces/status
   verbs:
@@ -628,7 +628,7 @@ metadata:
   name: operator-workspace-viewer-role
 rules:
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces
   verbs:
@@ -636,7 +636,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - batch.environment.sh
+  - batch.forkspacer.com
   resources:
   - workspaces/status
   verbs:
@@ -880,7 +880,7 @@ webhooks:
   name: mmodule-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -900,7 +900,7 @@ webhooks:
   name: mworkspace-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -928,7 +928,7 @@ webhooks:
   name: vmodule-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:
@@ -948,7 +948,7 @@ webhooks:
   name: vworkspace-v1.kb.io
   rules:
   - apiGroups:
-    - batch.environment.sh
+    - batch.forkspacer.com
     apiVersions:
     - v1
     operations:

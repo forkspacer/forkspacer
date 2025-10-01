@@ -65,7 +65,7 @@ kubectl apply -f https://raw.githubusercontent.com/forkspacer/forkspacer/main/di
 Define a workspace with hibernation policies:
 
 ```yaml
-apiVersion: batch.environment.sh/v1
+apiVersion: batch.forkspacer.com/v1
 kind: Workspace
 metadata:
   name: feature-branch-env
@@ -85,7 +85,7 @@ spec:
 Deploy services within the workspace:
 
 ```yaml
-apiVersion: batch.environment.sh/v1
+apiVersion: batch.forkspacer.com/v1
 kind: Module
 metadata:
   name: redis
@@ -183,13 +183,13 @@ kubectl get workspace production-env -o yaml | \
 Create isolated environments for each pull request with automatic cleanup:
 
 ```yaml
-apiVersion: batch.environment.sh/v1
+apiVersion: batch.forkspacer.com/v1
 kind: Workspace
 metadata:
   name: pr-1234
   labels:
-    environment.sh/type: "ephemeral"
-    environment.sh/pr: "1234"
+    forkspacer.com/type: "ephemeral"
+    forkspacer.com/pr: "1234"
 spec:
   type: kubernetes
   autoHibernation:
@@ -201,13 +201,13 @@ spec:
 Provide consistent, on-demand development environments:
 
 ```yaml
-apiVersion: batch.environment.sh/v1
+apiVersion: batch.forkspacer.com/v1
 kind: Workspace
 metadata:
   name: dev-alice
   labels:
-    environment.sh/owner: "alice"
-    environment.sh/type: "development"
+    forkspacer.com/owner: "alice"
+    forkspacer.com/type: "development"
 spec:
   type: kubernetes
   connection:
