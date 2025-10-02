@@ -1,0 +1,72 @@
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: guestbook
+  namespace: default
+spec:
+  source:
+    raw:
+      kind: ArgoCD
+      metadata:
+        name: guestbook
+        version: "1.0.0"
+        supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
+        author: "platform-team"
+        description: "Guestbook demo application deployed via ArgoCD"
+        category: "application"
+        resource_usage:
+          cpu: "100m"
+          memory: "128Mi"
+
+      config:
+        - type: option
+          name: "Target Revision"
+          alias: "targetRevision"
+          spec:
+            editable: true
+            required: false
+            default: "HEAD"
+            values:
+              - "HEAD"
+              - "main"
+              - "master"
+
+        - type: boolean
+          name: "Auto Sync"
+          alias: "autoSync"
+          spec:
+            editable: true
+            required: false
+            default: true
+
+      spec:
+        applicationName: "{{.applicationName}}"
+        project: default
+
+        source:
+          repoURL: https://github.com/argoproj/argocd-example-apps.git
+          targetRevision: "{{.config.targetRevision}}"
+          path: guestbook
+
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: default
+
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+            allowEmpty: false
+          syncOptions:
+            - CreateNamespace=true
+
+        cleanup:
+          cascade: true
+
+  workspace:
+    name: default
+    namespace: default
+
+  config:
+    targetRevision: HEAD
+    autoSync: true

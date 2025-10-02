@@ -89,3 +89,25 @@ func NewHelmService(
 func getHelmReleaseNameFromModule(module batchv1.Module) string {
 	return module.Namespace + "-" + module.Name
 }
+
+func NewArgoCDService(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+	controllerClient client.Client,
+) (*services.ArgoCDService, error) {
+	kubernetesConfig, err := NewKubernetesConfig(ctx, workspaceConn, controllerClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	argoCDService, err := services.NewArgoCDService(kubernetesConfig, "argocd")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ArgoCD service: %w", err)
+	}
+
+	return argoCDService, nil
+}
+
+func getArgoCDApplicationNameFromModule(module batchv1.Module) string {
+	return module.Namespace + "-" + module.Name
+}

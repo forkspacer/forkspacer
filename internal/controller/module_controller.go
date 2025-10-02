@@ -361,6 +361,31 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 			}
 			return nil
 		},
+		func(argoCDModule resources.ArgoCDModule) error {
+			applicationName := getArgoCDApplicationNameFromModule(*module)
+			metaData[manager.ArgoCDMetaDataKeys.ApplicationName] = applicationName
+
+			err = argoCDModule.RenderSpec(argoCDModule.NewRenderData(configMap, applicationName))
+			if err != nil {
+				return fmt.Errorf("failed to render ArgoCD module spec: %v", err)
+			}
+
+			argoCDService, err := r.newArgoCDService(ctx, workspace.Spec.Connection)
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD service: %w", err)
+			}
+
+			argoCDManager, err := manager.NewModuleArgoCDManager(&argoCDModule, argoCDService, applicationName, logf.FromContext(ctx))
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD manager: %w", err)
+			}
+
+			err = argoCDManager.Install(ctx, metaData)
+			if err != nil {
+				return fmt.Errorf("failed to install ArgoCD module: %v", err)
+			}
+			return nil
+		},
 	)
 
 	patch := client.MergeFrom(module.DeepCopy())
@@ -475,6 +500,36 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 			return nil
 		},
+		func(argoCDModule resources.ArgoCDModule) error {
+			applicationName, ok := metaData[manager.ArgoCDMetaDataKeys.ApplicationName].(string)
+			if !ok || applicationName == "" {
+				return fmt.Errorf(
+					"argocd application name not found in module metadata for module %s/%s. Unable to uninstall",
+					module.Namespace, module.Name,
+				)
+			}
+
+			err = argoCDModule.RenderSpec(argoCDModule.NewRenderData(configMap, applicationName))
+			if err != nil {
+				return fmt.Errorf("failed to render ArgoCD module spec: %v", err)
+			}
+
+			argoCDService, err := r.newArgoCDService(ctx, workspace.Spec.Connection)
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
+			}
+
+			argoCDManager, err := manager.NewModuleArgoCDManager(&argoCDModule, argoCDService, applicationName, logf.FromContext(ctx))
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD manager for module %s/%s: %w", module.Namespace, module.Name, err)
+			}
+
+			if err = argoCDManager.Uninstall(ctx, metaData); err != nil {
+				return fmt.Errorf("failed to uninstall ArgoCD module %s/%s: %v", module.Namespace, module.Name, err)
+			}
+
+			return nil
+		},
 	)
 }
 
@@ -576,6 +631,36 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 
 			if err = customManager.Sleep(ctx, metaData); err != nil {
 				return fmt.Errorf("failed to sleep Custom module %s/%s: %v", module.Namespace, module.Name, err)
+			}
+
+			return nil
+		},
+		func(argoCDModule resources.ArgoCDModule) error {
+			applicationName, ok := metaData[manager.ArgoCDMetaDataKeys.ApplicationName].(string)
+			if !ok || applicationName == "" {
+				return fmt.Errorf(
+					"argocd application name not found in module metadata for module %s/%s",
+					module.Namespace, module.Name,
+				)
+			}
+
+			err = argoCDModule.RenderSpec(argoCDModule.NewRenderData(configMap, applicationName))
+			if err != nil {
+				return fmt.Errorf("failed to render ArgoCD module spec: %v", err)
+			}
+
+			argoCDService, err := r.newArgoCDService(ctx, workspace.Spec.Connection)
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
+			}
+
+			argoCDManager, err := manager.NewModuleArgoCDManager(&argoCDModule, argoCDService, applicationName, logf.FromContext(ctx))
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD manager for module %s/%s: %w", module.Namespace, module.Name, err)
+			}
+
+			if err = argoCDManager.Sleep(ctx, metaData); err != nil {
+				return fmt.Errorf("failed to sleep ArgoCD module %s/%s: %v", module.Namespace, module.Name, err)
 			}
 
 			return nil
@@ -693,6 +778,36 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 
 			return nil
 		},
+		func(argoCDModule resources.ArgoCDModule) error {
+			applicationName, ok := metaData[manager.ArgoCDMetaDataKeys.ApplicationName].(string)
+			if !ok || applicationName == "" {
+				return fmt.Errorf(
+					"argocd application name not found in module metadata for module %s/%s",
+					module.Namespace, module.Name,
+				)
+			}
+
+			err = argoCDModule.RenderSpec(argoCDModule.NewRenderData(configMap, applicationName))
+			if err != nil {
+				return fmt.Errorf("failed to render ArgoCD module spec: %v", err)
+			}
+
+			argoCDService, err := r.newArgoCDService(ctx, workspace.Spec.Connection)
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
+			}
+
+			argoCDManager, err := manager.NewModuleArgoCDManager(&argoCDModule, argoCDService, applicationName, logf.FromContext(ctx))
+			if err != nil {
+				return fmt.Errorf("failed to create ArgoCD manager for module %s/%s: %w", module.Namespace, module.Name, err)
+			}
+
+			if err = argoCDManager.Resume(ctx, metaData); err != nil {
+				return fmt.Errorf("failed to resume ArgoCD module %s/%s: %v", module.Namespace, module.Name, err)
+			}
+
+			return nil
+		},
 	)
 
 	patch := client.MergeFrom(module.DeepCopy())
@@ -706,6 +821,10 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 
 func (r *ModuleReconciler) newHelmService(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*services.HelmService, error) {
 	return NewHelmService(ctx, workspaceConn, r.Client)
+}
+
+func (r *ModuleReconciler) newArgoCDService(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*services.ArgoCDService, error) {
+	return NewArgoCDService(ctx, workspaceConn, r.Client)
 }
 
 func (r *ModuleReconciler) newKubernetesConfig(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*rest.Config, error) {

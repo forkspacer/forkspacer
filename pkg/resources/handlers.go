@@ -12,6 +12,7 @@ func HandleResource(
 	configInputs *map[string]any,
 	handleHelmModule func(helmModule HelmModule) error,
 	handleCustomModule func(customModule CustomModule) error,
+	handleArgoCDModule func(argoCDModule ArgoCDModule) error,
 ) error {
 	baseResource, err := ReadResource[BaseResource](resourceData)
 	if err != nil {
@@ -63,6 +64,17 @@ func HandleResource(
 		}
 
 		return handleCustomModule(*customModule)
+	case KindArgoCDType:
+		if handleArgoCDModule == nil {
+			return nil
+		}
+
+		argoCDModule, err := ReadResource[ArgoCDModule](resourceData)
+		if err != nil {
+			return fmt.Errorf("failed to read ArgoCD module details: %v", err)
+		}
+
+		return handleArgoCDModule(*argoCDModule)
 	default:
 		return fmt.Errorf("unknown kind: %s", baseResource.GetKind())
 	}

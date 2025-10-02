@@ -21,6 +21,7 @@ type KindType string
 var (
 	KindHelmType   KindType = "Helm"
 	KindCustomType KindType = "Custom"
+	KindArgoCDType KindType = "ArgoCD"
 )
 
 type TypeMeta struct {
