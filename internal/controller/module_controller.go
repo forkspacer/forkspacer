@@ -26,7 +26,6 @@ import (
 	"net/http"
 	"time"
 
-	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,9 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/manager"
+	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	"github.com/forkspacer/forkspacer/pkg/types"
@@ -318,59 +319,23 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		annotations[types.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
 	}
 
-	installErr := resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			releaseName := getHelmReleaseNameFromModule(*module)
-			metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+		return err
+	} else {
+		installErr := iManager.Install(ctx, metaData)
 
-			err = helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
-			if err != nil {
-				return fmt.Errorf("failed to render Helm module spec: %v", err)
-			}
+		patch := client.MergeFrom(module.DeepCopy())
+		annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		utils.UpdateMap(&module.Annotations, annotations)
+		if err = r.Patch(ctx, module, patch); err != nil {
+			log.Error(err, "failed to patch module with install annotations", "module", module.Name, "namespace", module.Namespace)
+		}
 
-			helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return err
-			}
-
-			helmManager, err := manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
-			if err != nil {
-				return fmt.Errorf("failed to install Helm module: %w", err)
-			}
-
-			err = helmManager.Install(ctx, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to install Helm module: %v", err)
-			}
-			return nil
-		},
-		func(customModule resources.CustomModule) error {
-			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return fmt.Errorf("failed to create Kubernetes config: %w", err)
-			}
-
-			customManager, err := manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to install Custom module: %w", err)
-			}
-
-			err = customManager.Install(ctx, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to install Custom module: %v", err)
-			}
-			return nil
-		},
-	)
-
-	patch := client.MergeFrom(module.DeepCopy())
-	annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
-	utils.UpdateMap(&module.Annotations, annotations)
-	if err = r.Patch(ctx, module, patch); err != nil {
-		log.Error(err, "failed to patch module with install annotations", "module", module.Name, "namespace", module.Namespace)
+		if installErr != nil {
+			return fmt.Errorf("failed to install module: %w", installErr)
+		}
+		return nil
 	}
-
-	return installErr
 }
 
 func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.Module) error {
@@ -421,61 +386,14 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 		}
 	}
 
-	return resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
-			if !ok || releaseName == "" {
-				return fmt.Errorf(
-					"helm release name not found in module metadata for module %s/%s. Unable to uninstall",
-					module.Namespace, module.Name,
-				)
-			}
-
-			err = helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
-			if err != nil {
-				return fmt.Errorf("failed to render Helm module spec: %v", err)
-			}
-
-			helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return fmt.Errorf("failed to create Helm service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
-			}
-
-			manager, err := manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
-			if err != nil {
-				return fmt.Errorf("failed to create Helm manager for module %s/%s: %w", module.Namespace, module.Name, err)
-			}
-
-			if err = manager.Uninstall(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to uninstall Helm module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
-			return nil
-		},
-		func(customModule resources.CustomModule) error {
-			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return fmt.Errorf("failed to create Kubernetes config: %w", err)
-			}
-
-			manager, err := manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to uninstall Custom module: %w", err)
-			}
-
-			patch := client.MergeFrom(module.DeepCopy())
-			module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
-			if err = r.Patch(ctx, module, patch); err != nil {
-				log.Error(err, "failed to patch module with meta data annotations after 'NewModuleCustomManager'", "module", module.Name, "namespace", module.Namespace)
-			}
-
-			if err = manager.Uninstall(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to uninstall Custom module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
-			return nil
-		},
-	)
+	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+		return err
+	} else {
+		if err := iManager.Uninstall(ctx, metaData); err != nil {
+			return fmt.Errorf("failed to uninstall module: %w", err)
+		}
+		return nil
+	}
 }
 
 func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Module) error {
@@ -526,69 +444,22 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 		}
 	}
 
-	err = resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
-			if !ok || releaseName == "" {
-				return fmt.Errorf(
-					"helm release name not found in module metadata for module %s/%s",
-					module.Namespace, module.Name,
-				)
-			}
+	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+		return err
+	} else {
+		sleepErr := iManager.Sleep(ctx, metaData)
 
-			err = helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
-			if err != nil {
-				return fmt.Errorf("failed to render Helm module spec: %v", err)
-			}
+		patch := client.MergeFrom(module.DeepCopy())
+		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		if err := r.Patch(ctx, module, patch); err != nil {
+			log.Error(err, "failed to patch module with meta data annotations after sleep", "module", module.Name, "namespace", module.Namespace)
+		}
 
-			helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return fmt.Errorf("failed to create Helm service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
-			}
-
-			helmManager, err := manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
-			if err != nil {
-				return fmt.Errorf("failed to create Helm manager for module %s/%s: %w", module.Namespace, module.Name, err)
-			}
-
-			if err = helmManager.Sleep(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to sleep Helm module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
-			return nil
-		},
-		func(customModule resources.CustomModule) error {
-			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspace.Spec.Connection)
-			if err != nil {
-				return fmt.Errorf("failed to create Kubernetes config: %w", err)
-			}
-
-			customManager, err := manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to sleep Custom module: %w", err)
-			}
-
-			patch := client.MergeFrom(module.DeepCopy())
-			module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
-			if err = r.Patch(ctx, module, patch); err != nil {
-				log.Error(err, "failed to patch module with meta data annotations after 'NewModuleCustomManager'", "module", module.Name, "namespace", module.Namespace)
-			}
-
-			if err = customManager.Sleep(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to sleep Custom module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
-			return nil
-		},
-	)
-
-	patch := client.MergeFrom(module.DeepCopy())
-	module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
-	if err := r.Patch(ctx, module, patch); err != nil {
-		log.Error(err, "failed to patch module with meta data annotations after sleep", "module", module.Name, "namespace", module.Namespace)
+		if sleepErr != nil {
+			return fmt.Errorf("failed to sleep module: %w", sleepErr)
+		}
+		return nil
 	}
-
-	return err
 }
 
 func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Module) error {
@@ -639,58 +510,67 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 		}
 	}
 
-	err = resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
-			if !ok || releaseName == "" {
-				return fmt.Errorf(
-					"helm release name not found in module metadata for module %s/%s",
-					module.Namespace, module.Name,
-				)
-			}
+	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+		return err
+	} else {
+		resumeErr := iManager.Resume(ctx, metaData)
 
-			err = helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
+		patch := client.MergeFrom(module.DeepCopy())
+		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		if err := r.Patch(ctx, module, patch); err != nil {
+			log.Error(err, "failed to patch module with meta data annotations after resume", "module", module.Name, "namespace", module.Namespace)
+		}
+
+		if resumeErr != nil {
+			return fmt.Errorf("failed to resume module: %w", resumeErr)
+		}
+		return nil
+	}
+}
+
+func (r *ModuleReconciler) newManager(
+	ctx context.Context,
+	module *batchv1.Module,
+	workspaceConnection *batchv1.WorkspaceConnection,
+	moduleData []byte,
+	metaData managerBase.MetaData,
+	configMap map[string]any,
+) (managerBase.IManager, error) {
+	log := logf.FromContext(ctx)
+
+	var iManager managerBase.IManager
+
+	err := resources.HandleResource(moduleData, &configMap,
+		func(helmModule resources.HelmModule) error {
+			releaseName := getHelmReleaseNameFromModule(*module)
+			metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+
+			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
 			if err != nil {
 				return fmt.Errorf("failed to render Helm module spec: %v", err)
 			}
 
-			helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
+			helmService, err := r.newHelmService(ctx, workspaceConnection)
 			if err != nil {
-				return fmt.Errorf("failed to create Helm service for workspace %s/%s: %v", workspace.Namespace, workspace.Name, err)
+				return err
 			}
 
-			manager, err := manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
+			iManager, err = manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
 			if err != nil {
-				return fmt.Errorf("failed to create Helm manager for module %s/%s: %w", module.Namespace, module.Name, err)
+				return fmt.Errorf("failed to install Helm module: %w", err)
 			}
-
-			if err = manager.Resume(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to resume Helm module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
 			return nil
 		},
 		func(customModule resources.CustomModule) error {
-			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspace.Spec.Connection)
+			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspaceConnection)
 			if err != nil {
 				return fmt.Errorf("failed to create Kubernetes config: %w", err)
 			}
 
-			manager, err := manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
+			iManager, err = manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
 			if err != nil {
-				return fmt.Errorf("failed to resume Custom module: %w", err)
+				return fmt.Errorf("failed to install Custom module: %w", err)
 			}
-
-			patch := client.MergeFrom(module.DeepCopy())
-			module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
-			if err = r.Patch(ctx, module, patch); err != nil {
-				log.Error(err, "failed to patch module with meta data annotations after 'NewModuleCustomManager'", "module", module.Name, "namespace", module.Namespace)
-			}
-
-			if err = manager.Resume(ctx, metaData); err != nil {
-				return fmt.Errorf("failed to resume Custom module %s/%s: %v", module.Namespace, module.Name, err)
-			}
-
 			return nil
 		},
 	)
@@ -698,10 +578,10 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 	patch := client.MergeFrom(module.DeepCopy())
 	module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
 	if err := r.Patch(ctx, module, patch); err != nil {
-		log.Error(err, "failed to patch module with meta data annotations after resume", "module", module.Name, "namespace", module.Namespace)
+		log.Error(err, "failed to patch module with manager data", "module", module.Name, "namespace", module.Namespace)
 	}
 
-	return err
+	return iManager, err
 }
 
 func (r *ModuleReconciler) newHelmService(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*services.HelmService, error) {
@@ -728,7 +608,12 @@ func (r *ModuleReconciler) getWorkspace(ctx context.Context, workspaceRef *batch
 
 func (r *ModuleReconciler) readModuleLocation(moduleSource batchv1.ModuleSource) (io.Reader, error) {
 	if moduleSource.Raw != nil {
-		return bytes.NewReader(moduleSource.Raw.Raw), nil
+		// runtime.RawExtension stores data as JSON, convert it to YAML
+		yamlData, err := yaml.JSONToYAML(moduleSource.Raw.Raw)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert raw JSON to YAML: %w", err)
+		}
+		return bytes.NewReader(yamlData), nil
 	} else if moduleSource.HttpURL != nil {
 		resp, err := http.Get(*moduleSource.HttpURL)
 		if err != nil {
