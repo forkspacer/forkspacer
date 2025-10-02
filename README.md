@@ -43,7 +43,7 @@ The operator introduces two primary Custom Resource Definitions (CRDs):
 
 ### Installation
 
-Deploy the operator and its dependencies:
+#### Option 1: Helm Chart (Recommended)
 
 ```bash
 # Install cert-manager
@@ -53,6 +53,16 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+
+# Install Forkspacer using Helm
+helm install forkspacer helm/ --namespace operator-system --create-namespace
+```
+
+#### Option 2: Direct YAML
+
+```bash
+# Install cert-manager (same as above)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 
 # Deploy Forkspacer
 kubectl apply -f https://raw.githubusercontent.com/forkspacer/forkspacer/main/dist/install.yaml

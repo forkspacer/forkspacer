@@ -6,6 +6,8 @@ cliVersion: 4.8.0
 domain: forkspacer.com
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v1-alpha: {}
 projectName: operator
 repo: github.com/forkspacer/forkspacer
 resources:
