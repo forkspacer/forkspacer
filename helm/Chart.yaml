@@ -1,0 +1,17 @@
+apiVersion: v2
+name: forkspacer
+description: A Kubernetes operator for dynamic workspace lifecycle management
+type: application
+version: 0.1.2
+appVersion: "v0.1.2"
+keywords:
+  - operator
+  - workspace
+  - kubernetes
+  - forkspacer
+home: https://github.com/forkspacer/forkspacer
+sources:
+  - https://github.com/forkspacer/forkspacer
+maintainers:
+  - name: Forkspacer Team
+    email: team@forkspacer.com
