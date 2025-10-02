@@ -336,33 +336,13 @@ func (r *WorkspaceReconciler) handleEmptyPhase(ctx context.Context, workspace *b
 				return ctrl.Result{}, fmt.Errorf("failed to get source workspace %s/%s: %w", workspace.Spec.From.Namespace, workspace.Spec.From.Name, err)
 			}
 
-			modules, err := r.getRelatedModules(ctx, fromWorkspace.Namespace, fromWorkspace.Name)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to get related modules for source workspace %s/%s: %w", fromWorkspace.Namespace, fromWorkspace.Name, err)
-			}
-
-			for _, module := range modules.Items {
-				err = r.Create(ctx,
-					&batchv1.Module{
-						ObjectMeta: metav1.ObjectMeta{
-							Namespace:   module.Namespace,
-							Name:        workspace.Name + "-" + module.Name,
-							Annotations: make(map[string]string),
-						},
-						Spec: batchv1.ModuleSpec{
-							Source: module.Spec.Source,
-							Workspace: batchv1.ModuleWorkspaceReference{
-								Name:      workspace.Name,
-								Namespace: workspace.Namespace,
-							},
-							Config:     module.Spec.Config,
-							Hibernated: module.Spec.Hibernated,
-						},
-					},
+			if err := r.forkWorkspace(ctx, fromWorkspace, workspace); err != nil {
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to fork workspace %s/%s from %s/%s: %w",
+					workspace.Namespace, workspace.Name,
+					fromWorkspace.Namespace, fromWorkspace.Name,
+					err,
 				)
-				if err != nil {
-					log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", workspace.Namespace)
-				}
 			}
 		}
 	}
@@ -488,6 +468,54 @@ func (r *WorkspaceReconciler) handleAutoHibernation(ctx context.Context, workspa
 	}
 
 	return ctrl.Result{}
+}
+
+func (r *WorkspaceReconciler) forkWorkspace(
+	ctx context.Context,
+	sourceWorkspace, destWorkspace *batchv1.Workspace,
+) error {
+	log := logf.FromContext(ctx)
+
+	modules, err := r.getRelatedModules(ctx, sourceWorkspace.Namespace, sourceWorkspace.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get related modules for source workspace %s/%s: %w", sourceWorkspace.Namespace, sourceWorkspace.Name, err)
+	}
+
+	const maxNameLength = 253
+
+	for _, module := range modules.Items {
+		timestamp := time.Now().Format("20060102150405")
+		moduleName := module.Name
+
+		// Truncate module name if it would exceed Kubernetes name length limit
+		if len(moduleName)+len(timestamp) > maxNameLength {
+			moduleName = moduleName[:maxNameLength-len(timestamp)]
+		}
+
+		err = r.Create(ctx,
+			&batchv1.Module{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:   module.Namespace,
+					Name:        moduleName + "-" + timestamp,
+					Annotations: make(map[string]string),
+				},
+				Spec: batchv1.ModuleSpec{
+					Source: module.Spec.Source,
+					Workspace: batchv1.ModuleWorkspaceReference{
+						Name:      destWorkspace.Name,
+						Namespace: destWorkspace.Namespace,
+					},
+					Config:     module.Spec.Config,
+					Hibernated: module.Spec.Hibernated,
+				},
+			},
+		)
+		if err != nil {
+			log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
+		}
+	}
+
+	return nil
 }
 
 func (r *WorkspaceReconciler) sleepModules(ctx context.Context, workspace *batchv1.Workspace) error {

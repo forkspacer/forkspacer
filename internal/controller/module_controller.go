@@ -576,7 +576,9 @@ func (r *ModuleReconciler) newManager(
 	)
 
 	patch := client.MergeFrom(module.DeepCopy())
-	module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+	utils.UpdateMap(&module.Annotations, map[string]string{
+		types.ModuleAnnotationKeys.ManagerData: metaData.String(),
+	})
 	if err := r.Patch(ctx, module, patch); err != nil {
 		log.Error(err, "failed to patch module with manager data", "module", module.Name, "namespace", module.Namespace)
 	}
