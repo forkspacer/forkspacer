@@ -86,6 +86,6 @@ func NewHelmService(
 	return helmService, nil
 }
 
-func getHelmReleaseNameFromModule(module batchv1.Module) string {
+func newHelmReleaseNameFromModule(module batchv1.Module) string {
 	return module.Namespace + "-" + module.Name
 }

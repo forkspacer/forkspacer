@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -36,6 +37,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/manager"
+	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
+	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
@@ -492,8 +496,8 @@ func (r *WorkspaceReconciler) forkWorkspace(
 			moduleName = moduleName[:maxNameLength-len(timestamp)]
 		}
 
-		err = r.Create(ctx,
-			&batchv1.Module{
+		go func() {
+			newModule := &batchv1.Module{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace:   module.Namespace,
 					Name:        moduleName + "-" + timestamp,
@@ -508,11 +512,79 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					Config:     module.Spec.Config,
 					Hibernated: module.Spec.Hibernated,
 				},
-			},
-		)
-		if err != nil {
-			log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
-		}
+			}
+			err = r.Create(ctx, newModule)
+			if err != nil {
+				log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
+			}
+
+		Loop:
+			for range 180 {
+				if err := r.Get(ctx, client.ObjectKeyFromObject(newModule), newModule); err != nil {
+					log.Error(err, "")
+					continue
+				}
+
+				switch newModule.Status.Phase {
+				case batchv1.ModulePhaseReady, batchv1.ModulePhaseSleeped:
+					break Loop
+				case "", batchv1.ModulePhaseInstalling, batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
+					time.Sleep(time.Second * 3)
+					continue
+				case batchv1.ModulePhaseUninstalling, batchv1.ModulePhaseFailed:
+					return
+				default:
+					log.Error(errors.New(""), "")
+					return
+				}
+			}
+
+			resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+			if resourceAnnotation == "" {
+				log.Error(err, "")
+			}
+			moduleData := []byte(resourceAnnotation)
+
+			managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
+
+			metaData := make(managerBase.MetaData)
+			if ok && managerData != "" {
+				err := metaData.Parse([]byte(managerData))
+				if err != nil {
+					log.Error(err, "failed to parse manager data for module", "module", module.Name, "namespace", module.Namespace)
+					// Proceed with uninstall even if metadata parsing fails, as it might not be critical for uninstall
+				}
+			}
+
+			configMap := make(map[string]any)
+			configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+			if ok {
+				if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
+					log.Error(err, "failed to unmarshal module config from annotation")
+				}
+			}
+
+			err := resources.HandleResource(moduleData, nil,
+				func(helmModule resources.HelmModule) error {
+					releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
+					if !ok {
+						return fmt.Errorf("")
+					}
+
+					err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
+					if err != nil {
+						return fmt.Errorf("failed to render Helm module spec: %v", err)
+					}
+
+					helmService, err := NewHelmService(ctx, destWorkspace.Spec.Connection, r.Client)
+					if err != nil {
+						return err
+					}
+					return nil
+				},
+				nil,
+			)
+		}()
 	}
 
 	return nil

@@ -542,8 +542,13 @@ func (r *ModuleReconciler) newManager(
 
 	err := resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
-			releaseName := getHelmReleaseNameFromModule(*module)
-			metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+			var releaseName string
+			metaDataReleaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName]
+			if ok {
+				releaseName = metaDataReleaseName.(string)
+			} else {
+				releaseName = newHelmReleaseNameFromModule(*module)
+			}
 
 			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
 			if err != nil {
