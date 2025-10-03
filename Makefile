@@ -140,7 +140,7 @@ build-plugin: ## Build a plugin using Docker. Usage: make build-plugin PLUGIN=te
 
 .PHONY: dev-host
 dev-host: manifests generate fmt vet ## Run a controller from your host.
-	go run $(LDFLAGS) ./cmd/main.go
+	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
 
 KIND_CLUSTER_DEV ?= operator-dev
 
