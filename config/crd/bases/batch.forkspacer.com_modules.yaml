@@ -60,22 +60,6 @@ spec:
                 type: boolean
               source:
                 properties:
-                  configMap:
-                    properties:
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                    type: object
-                  existingHelmRelease:
-                    properties:
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                    required:
-                    - name
-                    type: object
                   github:
                     type: object
                   httpURL:
