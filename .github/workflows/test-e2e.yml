@@ -1,8 +1,28 @@
 name: E2E Tests
 
 on:
-  push:
   pull_request:
+    branches:
+      - main
+    paths:
+      # Core operator logic
+      - 'api/**'
+      - 'cmd/**'
+      - 'config/**'
+      - 'internal/**'
+      - 'pkg/**'
+      # Optional, if Helm deployment tested
+      - 'helm/**'
+      # Build & dependency metadata
+      - 'Makefile'
+      - 'go.mod'
+      - 'go.sum'
+      # Exclude irrelevant changes
+      - '!docs/**'
+      - '!examples/**'
+      - '!signatures/**'
+      - '!README.md'
+      - '!.github/**'
 
 jobs:
   test-e2e:

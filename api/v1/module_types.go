@@ -41,10 +41,18 @@ type ModuleSource struct {
 	Raw *runtime.RawExtension `json:"raw,omitempty"`
 
 	// +optional
+	ConfigMap *ModuleSourceConfigMapRef `json:"configMap,omitempty"`
+
+	// +optional
 	HttpURL *string `json:"httpURL,omitempty"`
 
 	// +optional
 	Github *ModuleSourceGithubSpec `json:"github,omitempty"`
+}
+
+type ModuleSourceConfigMapRef struct {
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type ModuleWorkspaceReference struct {
