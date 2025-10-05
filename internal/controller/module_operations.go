@@ -317,14 +317,12 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		)
 	}
 
-	// Create Helm service to verify release exists
-	helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
-	if err != nil {
-		return fmt.Errorf("failed to create Helm service: %w", err)
-	}
-
-	// TODO: Verify the release exists using helmService
-	// For now, just store adoption metadata
+	// TODO: Verify the release exists by creating HelmService and checking release status
+	// helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
+	// if err != nil {
+	//     return fmt.Errorf("failed to create Helm service: %w", err)
+	// }
+	// ... verify release exists ...
 
 	annotations := map[string]string{
 		types.ModuleAnnotationKeys.Resource: "adopted", // Marker that this is adopted
