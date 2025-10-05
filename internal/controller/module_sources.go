@@ -69,7 +69,7 @@ func (r *ModuleReconciler) readModuleFromRaw(raw *runtime.RawExtension) (io.Read
 
 func (r *ModuleReconciler) readModuleFromConfigMap(ctx context.Context, ref *batchv1.ModuleSourceConfigMapRef) (io.Reader, error) {
 	configMap := &corev1.ConfigMap{}
-	if err := r.Get(ctx, types.NamespacedName{
+	if err := r.Client.Get(ctx, types.NamespacedName{
 		Name:      ref.Name,
 		Namespace: ref.Namespace,
 	}, configMap); err != nil {
@@ -98,9 +98,7 @@ func (r *ModuleReconciler) readModuleFromHTTP(ctx context.Context, url string) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch module from HTTP URL %s: %w", url, err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP request failed with status %d for URL %s", resp.StatusCode, url)
