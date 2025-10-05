@@ -27,9 +27,8 @@ jobs:
         with:
           path-to-signatures: 'signatures/version1/cla.json'
           path-to-document: 'CLA.md'
-          branch: 'main'
+          branch: 'cla-signatures'
           allowlist: 'bot*,dependabot[bot]'
-          create-pr: true
           use-dco-flag: false
           lock-pullrequest-aftermerge: true
           suggest-recheck: true
