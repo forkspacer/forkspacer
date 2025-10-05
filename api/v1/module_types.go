@@ -36,6 +36,14 @@ const (
 
 type ModuleSourceGithubSpec struct{}
 
+type ModuleSourceExistingHelmReleaseRef struct {
+	// +required
+	Name string `json:"name"`
+
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 type ModuleSource struct {
 	// +optional
 	Raw *runtime.RawExtension `json:"raw,omitempty"`
@@ -48,6 +56,9 @@ type ModuleSource struct {
 
 	// +optional
 	Github *ModuleSourceGithubSpec `json:"github,omitempty"`
+
+	// +optional
+	ExistingHelmRelease *ModuleSourceExistingHelmReleaseRef `json:"existingHelmRelease,omitempty"`
 }
 
 type ModuleSourceConfigMapRef struct {

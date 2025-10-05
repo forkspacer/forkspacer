@@ -34,6 +34,11 @@ import (
 func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Module) error {
 	log := logf.FromContext(ctx)
 
+	// Special case: adopt existing Helm release
+	if module.Spec.Source.ExistingHelmRelease != nil {
+		return r.adoptExistingHelmRelease(ctx, module)
+	}
+
 	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
 	if err != nil {
 		return fmt.Errorf("failed to get workspace: %v", err)
@@ -50,7 +55,7 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		)
 	}
 
-	moduleReader, err := r.readModuleLocation(module.Spec.Source)
+	moduleReader, err := r.readModuleLocation(ctx, module.Spec.Source)
 	if err != nil {
 		return fmt.Errorf("failed to read module location: %v", err)
 	}
@@ -96,6 +101,13 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 
 func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.Module) error {
 	log := logf.FromContext(ctx)
+
+	// Skip uninstallation for adopted releases - just detach
+	if module.Annotations != nil && module.Annotations["forkspacer.com/adopted-release"] == "true" {
+		log.Info("skipping uninstall for adopted Helm release - only detaching from workspace",
+			"release", module.Annotations["forkspacer.com/release-name"])
+		return nil
+	}
 
 	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
 	if err != nil {
@@ -282,4 +294,52 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 		}
 		return nil
 	}
+}
+
+func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module *batchv1.Module) error {
+	log := logf.FromContext(ctx)
+
+	ref := module.Spec.Source.ExistingHelmRelease
+
+	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
+	if err != nil {
+		return fmt.Errorf("failed to get workspace: %v", err)
+	}
+
+	if !workspace.Status.Ready {
+		return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
+	}
+
+	if workspace.Status.Phase != batchv1.WorkspacePhaseReady {
+		return fmt.Errorf(
+			"workspace not in running phase: workspace %s/%s is not in '%s' phase, current phase is %s",
+			workspace.Namespace, workspace.Name, batchv1.WorkspacePhaseReady, workspace.Status.Phase,
+		)
+	}
+
+	// Create Helm service to verify release exists
+	helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
+	if err != nil {
+		return fmt.Errorf("failed to create Helm service: %w", err)
+	}
+
+	// TODO: Verify the release exists using helmService
+	// For now, just store adoption metadata
+
+	annotations := map[string]string{
+		types.ModuleAnnotationKeys.Resource: "adopted", // Marker that this is adopted
+		"forkspacer.com/adopted-release":    "true",
+		"forkspacer.com/release-name":       ref.Name,
+		"forkspacer.com/release-namespace":  ref.Namespace,
+	}
+
+	patch := client.MergeFrom(module.DeepCopy())
+	utils.UpdateMap(&module.Annotations, annotations)
+	if err := r.Patch(ctx, module, patch); err != nil {
+		log.Error(err, "failed to patch module with adoption annotations", "module", module.Name, "namespace", module.Namespace)
+		return err
+	}
+
+	log.Info("successfully adopted existing Helm release", "release", ref.Name, "namespace", ref.Namespace)
+	return nil
 }
