@@ -175,6 +175,19 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
+.PHONY: helm-sync
+helm-sync: build-installer ## Sync Kubebuilder manifests into Helm chart templates
+	@echo "🔄 Syncing Kubebuilder manifests into Helm chart..."
+	mkdir -p helm/templates
+	cp dist/install.yaml helm/templates/all.yaml
+	@echo "✅ Synced to helm/templates/all.yaml"
+
+.PHONY: helm-package
+helm-package: helm-sync ## Package Helm chart with current manifests
+	@echo "📦 Packaging Helm chart..."
+	helm package helm
+	@echo "✅ Helm chart packaged"
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
