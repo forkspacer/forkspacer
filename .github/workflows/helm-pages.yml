@@ -1,0 +1,147 @@
+name: Deploy Helm Charts to GitHub Pages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            TAG=$GITHUB_REF_NAME
+          else
+            VERSION=$(grep "^version:" helm/Chart.yaml | awk '{print $2}')
+            TAG="v$VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Package Helm Chart
+        id: package
+        run: |
+          # Create temporary copy and update versions
+          cp -r helm /tmp/helm-package
+          sed -i "s/version: .*/version: ${{ steps.version.outputs.version }}/" /tmp/helm-package/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: \"${{ steps.version.outputs.tag }}\"/" /tmp/helm-package/Chart.yaml
+          
+          # Package chart
+          helm package /tmp/helm-package
+          CHART_FILE=$(ls forkspacer-*.tgz)
+          echo "chart_file=$CHART_FILE" >> $GITHUB_OUTPUT
+
+      - name: Create charts directory
+        run: |
+          # Create a charts directory for GitHub Pages
+          mkdir -p charts-site
+          
+          # Copy all existing charts (if any) and new chart
+          cp *.tgz charts-site/ 2>/dev/null || true
+          
+          # Generate repository index
+          helm repo index charts-site/ --url https://forkspacer.github.io/forkspacer
+          
+          # Create simple index.html for the site
+          cat > charts-site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Forkspacer Helm Charts</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  .container { max-width: 800px; }
+                  pre { background: #f4f4f4; padding: 15px; border-radius: 5px; }
+                  .chart { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🚀 Forkspacer Helm Charts</h1>
+                  <p>Kubernetes operator for dynamic workspace lifecycle management</p>
+                  
+                  <h2>📦 Installation</h2>
+                  <pre>helm repo add forkspacer https://forkspacer.github.io/forkspacer
+          helm repo update
+          helm install forkspacer forkspacer/forkspacer --namespace operator-system --create-namespace</pre>
+                  
+                  <h2>📋 Available Charts</h2>
+                  <div class="chart">
+                      <h3>forkspacer</h3>
+                      <p>A Kubernetes operator for dynamic workspace lifecycle management</p>
+                      <a href="https://github.com/forkspacer/forkspacer">View on GitHub</a>
+                  </div>
+                  
+                  <h2>📄 Files</h2>
+                  <ul>
+                      <li><a href="index.yaml">index.yaml</a> - Helm repository index</li>
+                  </ul>
+              </div>
+          </body>
+          </html>
+          EOF
+          
+          echo "✅ Created charts site with ${{ steps.package.outputs.chart_file }}"
+          ls -la charts-site/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: charts-site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ steps.package.outputs.chart_file }}
+          body: |
+            ## 🚀 Helm Installation
+            
+            ```bash
+            helm repo add forkspacer https://forkspacer.github.io/forkspacer
+            helm repo update
+            helm install forkspacer forkspacer/forkspacer --version ${{ steps.version.outputs.version }}
+            ```
+            
+            ## 📋 Chart Repository
+            Visit: https://forkspacer.github.io/forkspacer
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Helm Charts Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart**: ${{ steps.package.outputs.chart_file }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: https://forkspacer.github.io/forkspacer" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "helm repo add forkspacer https://forkspacer.github.io/forkspacer" >> $GITHUB_STEP_SUMMARY
+          echo "helm repo update" >> $GITHUB_STEP_SUMMARY
+          echo "helm install forkspacer forkspacer/forkspacer" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
