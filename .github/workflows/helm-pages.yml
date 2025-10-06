@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Helm chart version (e.g., 0.1.5)'
+        required: true
 
 permissions:
   contents: read
@@ -28,9 +32,15 @@ jobs:
         id: version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Tag push - extract version from tag
             VERSION=${GITHUB_REF#refs/tags/v}
             TAG=$GITHUB_REF_NAME
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            # Manual trigger with input version
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v$VERSION"
           else
+            # Fallback to Chart.yaml version
             VERSION=$(grep "^version:" helm/Chart.yaml | awk '{print $2}')
             TAG="v$VERSION"
           fi
@@ -104,16 +114,16 @@ jobs:
           ls -la charts-site/
 
       - name: Setup Pages
-        uses: actions/configure-pages@v3
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
+        uses: actions/upload-pages-artifact@v3
         with:
           path: charts-site
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
