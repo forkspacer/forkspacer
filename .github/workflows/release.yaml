@@ -36,6 +36,7 @@ jobs:
 
       - name: Build and push image via Makefile
         run: |
+          make manifests generate
           make docker-build VERSION=${VERSION} IMG=${IMAGE_REPO}:${VERSION}
           make docker-push IMG=${IMAGE_REPO}:${VERSION}
 
