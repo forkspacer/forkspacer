@@ -1,0 +1,45 @@
+name: Release - Build and Push Image
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REPO: ghcr.io/forkspacer/forkspacer
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract release tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Build and push image via Makefile
+        run: |
+          make docker-build VERSION=${VERSION} IMG=${IMAGE_REPO}:${VERSION}
+          make docker-push IMG=${IMAGE_REPO}:${VERSION}
+
+      - name: Push "latest" tag
+        run: |
+          docker tag ${IMAGE_REPO}:${VERSION} ${IMAGE_REPO}:latest
+          docker push ${IMAGE_REPO}:latest
