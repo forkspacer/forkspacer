@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -28,6 +30,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,6 +44,7 @@ import (
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
+	"github.com/forkspacer/forkspacer/pkg/services"
 	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
@@ -513,78 +518,372 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					Hibernated: module.Spec.Hibernated,
 				},
 			}
-			err = r.Create(ctx, newModule)
-			if err != nil {
+			if err = r.Create(ctx, newModule); err != nil {
 				log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
+				return
 			}
 
-		Loop:
+			time.Sleep(time.Millisecond * 500)
+
+		waitForInitialNewModuleState:
 			for range 180 {
 				if err := r.Get(ctx, client.ObjectKeyFromObject(newModule), newModule); err != nil {
-					log.Error(err, "")
+					log.Error(err, "failed to get new module during initial creation wait", "module_name", newModule.Name, "module_namespace", newModule.Namespace)
+					time.Sleep(time.Second * 3)
 					continue
 				}
 
 				switch newModule.Status.Phase {
 				case batchv1.ModulePhaseReady, batchv1.ModulePhaseSleeped:
-					break Loop
+					break waitForInitialNewModuleState
 				case "", batchv1.ModulePhaseInstalling, batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
 					time.Sleep(time.Second * 3)
 					continue
 				case batchv1.ModulePhaseUninstalling, batchv1.ModulePhaseFailed:
 					return
 				default:
-					log.Error(errors.New(""), "")
+					log.Error(errors.New("unexpected new module phase encountered"), "encountered unexpected new module phase during initial creation wait", "module_name", newModule.Name, "module_namespace", newModule.Namespace, "phase", newModule.Status.Phase)
 					return
 				}
 			}
 
-			resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
-			if resourceAnnotation == "" {
-				log.Error(err, "")
-			}
-			moduleData := []byte(resourceAnnotation)
-
-			managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
-
-			metaData := make(managerBase.MetaData)
-			if ok && managerData != "" {
-				err := metaData.Parse([]byte(managerData))
-				if err != nil {
-					log.Error(err, "failed to parse manager data for module", "module", module.Name, "namespace", module.Namespace)
-					// Proceed with uninstall even if metadata parsing fails, as it might not be critical for uninstall
-				}
+			switch newModule.Status.Phase {
+			case batchv1.ModulePhaseReady, batchv1.ModulePhaseSleeped:
+			default:
+				log.Error(errors.New("new module did not become ready or hibernated within the expected timeout"), "timed out waiting for new module to become ready or hibernated", "module_name", newModule.Name, "module_namespace", newModule.Namespace, "final_phase", newModule.Status.Phase)
+				return
 			}
 
-			configMap := make(map[string]any)
-			configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
-			if ok {
-				if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
-					log.Error(err, "failed to unmarshal module config from annotation")
-				}
+			if err := r.migrateModuleData(ctx, &module, newModule, sourceWorkspace, destWorkspace); err != nil {
+				log.Error(err, "failed to migrate module data", "module_name", module.Name, "module_namespace", module.Namespace)
 			}
-
-			err := resources.HandleResource(moduleData, nil,
-				func(helmModule resources.HelmModule) error {
-					releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
-					if !ok {
-						return fmt.Errorf("")
-					}
-
-					err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
-					if err != nil {
-						return fmt.Errorf("failed to render Helm module spec: %v", err)
-					}
-
-					helmService, err := NewHelmService(ctx, destWorkspace.Spec.Connection, r.Client)
-					if err != nil {
-						return err
-					}
-					return nil
-				},
-				nil,
-			)
 		}()
+	}
+
+	return nil
+}
+
+func (r *WorkspaceReconciler) migrateModuleData(
+	ctx context.Context,
+	sourceModule, destModule *batchv1.Module,
+	sourceWorkspace, destWorkspace *batchv1.Workspace,
+) error {
+	log := logf.FromContext(ctx)
+
+	// This block checks if both source and destination modules are Helm modules.
+	// It returns early if the resource annotation is missing or if it's a CustomModule, as data migration is only supported for Helm modules.
+	{
+		resourceAnnotation := sourceModule.Annotations[types.ModuleAnnotationKeys.Resource]
+		if resourceAnnotation == "" {
+			return nil
+		}
+
+		if err := resources.HandleResource([]byte(resourceAnnotation), nil,
+			func(helmModule resources.HelmModule) error { return nil },
+			func(_ resources.CustomModule) error {
+				return errors.New("not supported")
+			},
+		); err != nil {
+			return nil
+		}
+
+		resourceAnnotation = destModule.Annotations[types.ModuleAnnotationKeys.Resource]
+		if resourceAnnotation == "" {
+			return nil
+		}
+
+		if err := resources.HandleResource([]byte(resourceAnnotation), nil,
+			func(helmModule resources.HelmModule) error { return nil },
+			func(_ resources.CustomModule) error {
+				return errors.New("not supported")
+			},
+		); err != nil {
+			return nil
+		}
+	}
+
+	if destModule.Spec.Hibernated == nil || utils.NotNilAndNot(destModule.Spec.Hibernated, true) {
+		patch := client.MergeFrom(destModule.DeepCopy())
+		destModule.Spec.Hibernated = utils.ToPtr(true)
+		if err := r.Patch(ctx, destModule, patch); err != nil {
+			return err
+		}
+	}
+
+waitForSleepedDestModuleState:
+	for range 180 {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(destModule), destModule); err != nil {
+			log.Error(err, "failed to get destination module during hibernation wait", "module_name", destModule.Name, "module_namespace", destModule.Namespace)
+			time.Sleep(time.Second * 3) // Add a sleep here to prevent busy-looping on Get errors
+			continue
+		}
+
+		switch destModule.Status.Phase {
+		case batchv1.ModulePhaseSleeped:
+			break waitForSleepedDestModuleState
+		case "", batchv1.ModulePhaseReady, batchv1.ModulePhaseInstalling, batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
+			time.Sleep(time.Second * 3)
+			continue
+		case batchv1.ModulePhaseUninstalling, batchv1.ModulePhaseFailed:
+			return nil // Return nil as migration cannot proceed if module is uninstalling or failed
+		default:
+			return fmt.Errorf("unexpected destination module phase '%s' encountered during hibernation wait for module %s/%s", destModule.Status.Phase, destModule.Namespace, destModule.Name)
+		}
+	}
+
+	if destModule.Status.Phase != batchv1.ModulePhaseSleeped {
+		return fmt.Errorf("timed out waiting for destination module %s/%s to become hibernated, current phase: %s", destModule.Namespace, destModule.Name, destModule.Status.Phase)
+	}
+
+	if sourceModule.Spec.Hibernated == nil || utils.NotNilAndNot(sourceModule.Spec.Hibernated, true) {
+		patch := client.MergeFrom(sourceModule.DeepCopy())
+		sourceModule.Spec.Hibernated = utils.ToPtr(true)
+		if err := r.Patch(ctx, sourceModule, patch); err != nil {
+			return err
+		}
+	}
+
+waitForSleepedSourceModuleState:
+	for range 180 {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(sourceModule), sourceModule); err != nil {
+			log.Error(err, "failed to get source module during hibernation wait", "module_name", sourceModule.Name, "module_namespace", sourceModule.Namespace)
+			time.Sleep(time.Second * 3) // Add a sleep here to prevent busy-looping on Get errors
+			continue
+		}
+
+		switch sourceModule.Status.Phase {
+		case batchv1.ModulePhaseSleeped:
+			break waitForSleepedSourceModuleState
+		case "", batchv1.ModulePhaseReady, batchv1.ModulePhaseInstalling, batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
+			time.Sleep(time.Second * 3)
+			continue
+		case batchv1.ModulePhaseUninstalling, batchv1.ModulePhaseFailed:
+			return nil // Return nil as migration cannot proceed if module is uninstalling or failed
+		default:
+			return fmt.Errorf("unexpected source module phase '%s' encountered during hibernation wait for module %s/%s", sourceModule.Status.Phase, sourceModule.Namespace, sourceModule.Name)
+		}
+	}
+
+	if sourceModule.Status.Phase != batchv1.ModulePhaseSleeped {
+		return fmt.Errorf("timed out waiting for source module %s/%s to become hibernated, current phase: %s", sourceModule.Namespace, sourceModule.Name, sourceModule.Status.Phase)
+	}
+
+	var (
+		// sourceHelmService *services.HelmService
+		// sourcePVCs        *corev1.PersistentVolumeClaimList
+		sourceHelmModule resources.HelmModule
+	)
+	{
+		resourceAnnotation := sourceModule.Annotations[types.ModuleAnnotationKeys.Resource]
+		if resourceAnnotation == "" {
+			return fmt.Errorf("module %s/%s is missing resource annotation", sourceModule.Namespace, sourceModule.Name)
+		}
+		sourceModuleData := []byte(resourceAnnotation)
+
+		managerData, ok := sourceModule.Annotations[types.ModuleAnnotationKeys.ManagerData]
+
+		metaData := make(managerBase.MetaData)
+		if ok && managerData != "" {
+			err := metaData.Parse([]byte(managerData))
+			if err != nil {
+				log.Error(err, "failed to parse manager data for module", "module", sourceModule.Name, "namespace", sourceModule.Namespace)
+			}
+		}
+
+		configMap := make(map[string]any)
+		configMapData, ok := sourceModule.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+		if ok {
+			if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
+				log.Error(err, "failed to unmarshal module config from annotation")
+			}
+		}
+
+		err := resources.HandleResource(sourceModuleData, &configMap,
+			func(helmModule resources.HelmModule) error {
+				releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
+				if !ok {
+					return fmt.Errorf("source module release name not found in manager metadata or not a string")
+				}
+
+				err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
+				if err != nil {
+					return fmt.Errorf("failed to render Helm module spec: %v", err)
+				}
+				sourceHelmModule = helmModule
+
+				// sourceHelmService, err := NewHelmService(ctx, sourceWorkspace.Spec.Connection, r.Client)
+				// if err != nil {
+				// 	return err
+				// }
+
+				// sourcePVCs, err = sourceHelmService.ListPVCs(ctx, releaseName, helmModule.Spec.Namespace)
+				// if err != nil {
+				// 	return err
+				// }
+
+				return nil
+			},
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	{
+		resourceAnnotation := destModule.Annotations[types.ModuleAnnotationKeys.Resource]
+		if resourceAnnotation == "" {
+			return fmt.Errorf("module %s/%s is missing resource annotation", destModule.Namespace, destModule.Name)
+		}
+		destModuleData := []byte(resourceAnnotation)
+
+		managerData, ok := destModule.Annotations[types.ModuleAnnotationKeys.ManagerData]
+
+		metaData := make(managerBase.MetaData)
+		if ok && managerData != "" {
+			err := metaData.Parse([]byte(managerData))
+			if err != nil {
+				log.Error(err, "failed to parse manager data for module", "module", destModule.Name, "namespace", destModule.Namespace)
+			}
+		}
+
+		configMap := make(map[string]any)
+		configMapData, ok := destModule.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+		if ok {
+			if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
+				log.Error(err, "failed to unmarshal module config from annotation")
+			}
+		}
+
+		err := resources.HandleResource(destModuleData, &configMap,
+			func(helmModule resources.HelmModule) error {
+				releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
+				if !ok {
+					return fmt.Errorf("destination module release name not found in manager metadata or not a string")
+				}
+
+				err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
+				if err != nil {
+					return fmt.Errorf("failed to render Helm module spec: %v", err)
+				}
+
+				pvMigrateService := services.NewPVMigrateService(nil)
+				destKubeConfig, err := NewKubernetesConfig(ctx, destWorkspace.Spec.Connection, r.Client)
+				if err != nil {
+					return err
+				}
+
+				sourceKubeConfig, err := NewKubernetesConfig(ctx, sourceWorkspace.Spec.Connection, r.Client)
+				if err != nil {
+					return err
+				}
+
+				// Convert rest.Config to kubeconfig format and write to files
+				destKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("dest-kubeconfig-%s-*.yaml", destWorkspace.Name))
+				destKubeconfigData, err := clientcmd.Write(clientcmdapi.Config{
+					Clusters: map[string]*clientcmdapi.Cluster{
+						"default": {
+							Server:                   destKubeConfig.Host,
+							CertificateAuthorityData: destKubeConfig.CAData,
+							InsecureSkipTLSVerify:    destKubeConfig.Insecure || len(destKubeConfig.CAData) == 0,
+						},
+					},
+					AuthInfos: map[string]*clientcmdapi.AuthInfo{
+						"default": {
+							ClientCertificateData: destKubeConfig.CertData,
+							ClientKeyData:         destKubeConfig.KeyData,
+							Token:                 destKubeConfig.BearerToken,
+						},
+					},
+					Contexts: map[string]*clientcmdapi.Context{
+						"default": {
+							Cluster:  "default",
+							AuthInfo: "default",
+						},
+					},
+					CurrentContext: "default",
+				})
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(destKubeconfigPath, destKubeconfigData, 0600); err != nil {
+					return err
+				}
+
+				sourceKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("source-kubeconfig-%s-*.yaml", sourceWorkspace.Name))
+				sourceKubeconfigData, err := clientcmd.Write(clientcmdapi.Config{
+					Clusters: map[string]*clientcmdapi.Cluster{
+						"default": {
+							Server:                   sourceKubeConfig.Host,
+							CertificateAuthorityData: sourceKubeConfig.CAData,
+							InsecureSkipTLSVerify:    sourceKubeConfig.Insecure || len(sourceKubeConfig.CAData) == 0,
+						},
+					},
+					AuthInfos: map[string]*clientcmdapi.AuthInfo{
+						"default": {
+							ClientCertificateData: sourceKubeConfig.CertData,
+							ClientKeyData:         sourceKubeConfig.KeyData,
+							Token:                 sourceKubeConfig.BearerToken,
+						},
+					},
+					Contexts: map[string]*clientcmdapi.Context{
+						"default": {
+							Cluster:  "default",
+							AuthInfo: "default",
+						},
+					},
+					CurrentContext: "default",
+				})
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(sourceKubeconfigPath, sourceKubeconfigData, 0600); err != nil {
+					return err
+				}
+
+				if sourceHelmModule.Spec.Migration != nil &&
+					sourceHelmModule.Spec.Migration.PVC != nil &&
+					sourceHelmModule.Spec.Migration.PVC.Enabled {
+					for i, sourcePVCName := range sourceHelmModule.Spec.Migration.PVC.Names {
+						if err := pvMigrateService.MigratePVC(ctx,
+							sourceKubeconfigPath, sourcePVCName, sourceHelmModule.Spec.Namespace,
+							destKubeconfigPath, helmModule.Spec.Migration.PVC.Names[i], helmModule.Spec.Namespace,
+						); err != nil {
+							log.Error(err, "failed to migrate PVC",
+								"sourcePVC", sourcePVCName,
+								"sourceNamespace", sourceHelmModule.Spec.Namespace,
+								"destinationPVC", helmModule.Spec.Migration.PVC.Names[i],
+								"destinationNamespace", helmModule.Spec.Namespace)
+						}
+					}
+				}
+
+				_ = os.Remove(destKubeconfigPath)
+				_ = os.Remove(sourceKubeconfigPath)
+
+				return nil
+			},
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	if sourceModule.Spec.Hibernated == nil || utils.NotNilAndZero(sourceModule.Spec.Hibernated) {
+		patch := client.MergeFrom(sourceModule.DeepCopy())
+		sourceModule.Spec.Hibernated = utils.ToPtr(false)
+		if err := r.Patch(ctx, sourceModule, patch); err != nil {
+			log.Error(err, "failed to update source module to hibernate state")
+		}
+	}
+
+	if destModule.Spec.Hibernated == nil || utils.NotNilAndZero(destModule.Spec.Hibernated) {
+		patch := client.MergeFrom(destModule.DeepCopy())
+		destModule.Spec.Hibernated = utils.ToPtr(false)
+		if err := r.Patch(ctx, destModule, patch); err != nil {
+			log.Error(err, "failed to update destination module to hibernate state")
+		}
 	}
 
 	return nil

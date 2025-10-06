@@ -1,6 +1,7 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  concurrency: 12
 linters:
   default: none
   enable:

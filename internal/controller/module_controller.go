@@ -251,6 +251,7 @@ func (r *ModuleReconciler) newManager(
 				releaseName = metaDataReleaseName.(string)
 			} else {
 				releaseName = newHelmReleaseNameFromModule(*module)
+				metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
 			}
 
 			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))

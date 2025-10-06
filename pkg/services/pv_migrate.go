@@ -1,7 +1,9 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 
 	"github.com/forkspacer/forkspacer/pkg/utils"
@@ -27,6 +29,19 @@ func (s *PVMigrateService) NewCMD(ctx context.Context, args ...string) *exec.Cmd
 	return exec.CommandContext(ctx, s.pvMigrateToolPath, args...)
 }
 
+func (s *PVMigrateService) RunCMD(ctx context.Context, args ...string) (stdout, stderr string, err error) {
+	cmd := s.NewCMD(ctx, args...)
+
+	var stdoutBuff, stderrBuff bytes.Buffer
+	cmd.Stdout = &stdoutBuff
+	cmd.Stderr = &stderrBuff
+
+	err = cmd.Run()
+	stdout = stdoutBuff.String()
+	stderr = stderrBuff.String()
+	return
+}
+
 // MigratePVC migrates data from source PVC to destination PVC using pv-migrate CLI
 func (s *PVMigrateService) MigratePVC(
 	ctx context.Context,
@@ -43,11 +58,12 @@ func (s *PVMigrateService) MigratePVC(
 		"--dest-namespace", destPVCNamespace,
 
 		"--strategies", "mnt2,svc,lbsvc",
+		"--ignore-mounted",
 	}
 
-	_, err := s.NewCMD(ctx, args...).CombinedOutput()
+	_, stderr, err := s.RunCMD(ctx, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", err, stderr)
 	}
 
 	return nil
