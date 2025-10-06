@@ -218,7 +218,9 @@ func (service HelmService) ScaleDeployments( //nolint:dupl
 	releaseName, namespace string,
 	replicas int32,
 ) ([]ResourceReplicaCount, error) {
-	deploymentList, err := service.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+	deploymentList, err := service.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/instance=" + releaseName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to list deployments for release '%s' in namespace '%s': %w",
@@ -287,7 +289,9 @@ func (service HelmService) ScaleReplicaSets( //nolint:dupl
 	releaseName, namespace string,
 	replicas int32,
 ) ([]ResourceReplicaCount, error) {
-	replicaSetList, err := service.kubernetesClient.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
+	replicaSetList, err := service.kubernetesClient.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/instance=" + releaseName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to list replica sets for release '%s' in namespace '%s': %w",
@@ -356,7 +360,9 @@ func (service HelmService) ScaleStatefulSets( //nolint:dupl
 	releaseName, namespace string,
 	replicas int32,
 ) ([]ResourceReplicaCount, error) {
-	statefulSetList, err := service.kubernetesClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	statefulSetList, err := service.kubernetesClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/instance=" + releaseName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to list stateful sets for release '%s' in namespace '%s': %w",
