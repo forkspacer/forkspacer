@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forkspacer Helm Charts | Kubernetes Operator Repository</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 40px 0;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .copy-btn:hover {
+            background: #2d3748;
+        }
+        
+        .charts-grid {
+            display: grid;
+            gap: 24px;
+            margin-top: 20px;
+        }
+        
+        .chart-card-pro {
+            background: linear-gradient(135deg, #f8f9fb 0%, #ffffff 100%);
+            border: 1px solid #e1e8ed;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .chart-card-pro:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            border-color: #667eea;
+        }
+        
+        .chart-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 24px 24px 16px;
+            border-bottom: 1px solid #f0f4f8;
+        }
+        
+        .chart-icon {
+            flex-shrink: 0;
+        }
+        
+        .chart-title-section {
+            flex: 1;
+        }
+        
+        .chart-title-section h3 {
+            margin: 0 0 4px 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a365d;
+        }
+        
+        .chart-version {
+            font-size: 0.875rem;
+            color: #64748b;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+        }
+        
+        .chart-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .badge {
+            display: inline-block;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-right: 10px;
+        }
+        
+        .badge-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .badge-blue {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        
+        .chart-description {
+            padding: 0 24px 20px;
+        }
+        
+        .chart-description p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.6;
+        }
+        
+        .chart-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+            padding: 20px 24px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        
+        .stat-value {
+            display: block;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1e293b;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+        }
+        
+        .chart-documentation {
+            padding: 20px 24px;
+        }
+        
+        .doc-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .doc-icon {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+        
+        .doc-content {
+            flex: 1;
+        }
+        
+        .doc-title {
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 4px;
+        }
+        
+        .doc-desc {
+            font-size: 0.875rem;
+            color: #1e3a8a;
+            line-height: 1.5;
+        }
+        
+        .doc-desc a {
+            color: #1d4ed8;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        
+        .doc-desc a:hover {
+            text-decoration: underline;
+        }
+        
+        .chart-actions {
+            padding: 20px 24px;
+            background: #fafbfc;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: #667eea;
+            border-color: #667eea;
+        }
+        
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .files-list {
+            list-style: none;
+        }
+        
+        .files-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .files-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .files-list a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .files-list a:hover {
+            text-decoration: underline;
+        }
+        
+        .alert {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-info {
+            background: #e7f3ff;
+            border-color: #b8daff;
+            color: #004085;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .section {
+                padding: 20px;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .chart-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <img src="https://forkspacer.com/_astro/forkspacer.B5xkuXaQ_Z1uLFw7.webp" alt="Forkspacer Logo" style="height: 80px; margin-bottom: 20px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));">
+            <h1>Forkspacer Helm Charts</h1>
+            <p>Professional Kubernetes operator for dynamic workspace lifecycle management, hibernation, and resource optimization</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="section">
+                <h2>📦 Installation</h2>
+                <div class="alert alert-info">
+                    <span>ℹ️</span>
+                    <span>Make sure you have Helm 3.0+ and kubectl configured for your Kubernetes cluster</span>
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre># Add Forkspacer Helm repository
+helm repo add forkspacer https://forkspacer.github.io/forkspacer
+helm repo update
+
+# Install cert-manager (prerequisite)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
+
+# Wait for cert-manager to be ready
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+
+# Install Forkspacer operator
+helm install forkspacer forkspacer/forkspacer \
+  --namespace operator-system \
+  --create-namespace</pre>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>📋 Current Chart</h2>
+                <div class="charts-grid">
+                    <div class="chart-card-pro">
+                        <div class="chart-header">
+                            <div class="chart-icon">
+                                <img src="https://forkspacer.com/_astro/forkspacer.B5xkuXaQ_Z1uLFw7.webp" alt="Forkspacer" style="width: 32px; height: 32px; border-radius: 6px;">
+                            </div>
+                            <div class="chart-title-section">
+                                <h3>forkspacer</h3>
+                                <div class="chart-version">{{VERSION_TAG}}</div>
+                            </div>
+                            <div class="chart-badges">
+                                <span class="badge badge-success">Stable</span>
+                                <span class="badge badge-blue">Operator</span>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-description">
+                            <p>A cloud-native Kubernetes operator for dynamic workspace lifecycle management. Features include automated hibernation, resource optimization, multi-tenant isolation, and declarative environment provisioning.</p>
+                        </div>
+                        
+                        <div class="chart-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">App Version</span>
+                                <span class="stat-value">{{VERSION_TAG}}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Chart Version</span>
+                                <span class="stat-value">{{VERSION_NUMBER}}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Kubernetes</span>
+                                <span class="stat-value">v1.20+</span>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-documentation">
+                            <div class="doc-notice">
+                                <div class="doc-icon">📚</div>
+                                <div class="doc-content">
+                                    <div class="doc-title">Documentation Available</div>
+                                    <div class="doc-desc">Complete setup guides, API reference, and examples in our <a href="https://forkspacer.com/" target="_blank">official documentation</a></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-actions">
+                            <a href="https://github.com/forkspacer/forkspacer" class="btn btn-primary" target="_blank">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                                Source Code
+                            </a>
+                            <a href="https://forkspacer.com/" class="btn btn-outline" target="_blank">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                                Documentation
+                            </a>
+                            <a href="https://forkspacer.com/guides/quick-start/" class="btn btn-outline" target="_blank">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                Quick Start
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>📄 Repository Files</h2>
+                <ul class="files-list">
+                    <li>
+                        <span>📋</span>
+                        <a href="index.yaml">index.yaml</a>
+                        <span style="color: #6c757d;">- Helm repository index</span>
+                    </li>
+                    <li>
+                        <span>📦</span>
+                        <a href="forkspacer-{{VERSION_NUMBER}}.tgz">forkspacer-{{VERSION_NUMBER}}.tgz</a>
+                        <span style="color: #6c757d;">- Current chart package</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="section">
+                <h2>🌟 Features</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">⚡ Dynamic Provisioning</h4>
+                        <p style="color: #6c757d; font-size: 14px;">Create isolated workspaces with complete application stacks</p>
+                    </div>
+                    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">💤 Auto Hibernation</h4>
+                        <p style="color: #6c757d; font-size: 14px;">Intelligent resource management with automated sleep/wake cycles</p>
+                    </div>
+                    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">🔄 Environment Forking</h4>
+                        <p style="color: #6c757d; font-size: 14px;">Clone and branch existing environments for parallel development</p>
+                    </div>
+                    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="color: #495057; margin-bottom: 10px;">📊 Resource Optimization</h4>
+                        <p style="color: #6c757d; font-size: 14px;">Multi-tenant isolation and intelligent resource allocation</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.nextElementSibling;
+            const text = codeBlock.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
