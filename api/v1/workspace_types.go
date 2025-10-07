@@ -80,6 +80,9 @@ type WorkspaceFromReference struct {
 
 	// +kubebuilder:default=default
 	Namespace string `json:"namespace"`
+
+	// +kubebuilder:default=false
+	MigrateData bool `json:"migrateData"`
 }
 
 // WorkspaceSpec defines the desired state of Workspace

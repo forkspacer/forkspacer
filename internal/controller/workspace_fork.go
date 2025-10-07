@@ -93,11 +93,82 @@ func (r *WorkspaceReconciler) forkWorkspace(
 				return
 			}
 
-			if err := r.migrateModuleData(ctx, &module, newModule, sourceWorkspace, destWorkspace); err != nil {
-				log.Error(err, "failed to migrate module data", "module_name", module.Name, "module_namespace", module.Namespace)
-				r.Recorder.Event(destWorkspace, "Warning", "DataMigration", fmt.Sprintf("Failed to migrate data for new module %s/%s (from source %s/%s): %v", newModule.Namespace, newModule.Name, module.Namespace, module.Name, err))
+			if destWorkspace.Spec.From.MigrateData {
+				if err := r.migrateModuleData(ctx, &module, newModule, sourceWorkspace, destWorkspace); err != nil {
+					log.Error(err, "failed to migrate module data", "module_name", module.Name, "module_namespace", module.Namespace)
+					r.Recorder.Event(destWorkspace, "Warning", "DataMigration", fmt.Sprintf("Failed to migrate data for new module %s/%s (from source %s/%s): %v", newModule.Namespace, newModule.Name, module.Namespace, module.Name, err))
+				}
 			}
 		}()
+	}
+
+	return nil
+}
+
+func (r *WorkspaceReconciler) migrateModuleData(
+	ctx context.Context,
+	sourceModule, destModule *batchv1.Module,
+	sourceWorkspace, destWorkspace *batchv1.Workspace,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Only Helm modules support data migration
+	if !IsHelmModule(sourceModule) || !IsHelmModule(destModule) {
+		return nil
+	}
+
+	// Parse source Helm module
+	sourceHelmModule, err := ParseHelmModule(ctx, sourceModule)
+	if err != nil {
+		return fmt.Errorf("failed to parse source Helm module: %w", err)
+	}
+
+	// Check if PVC migration is enabled
+	if sourceHelmModule.Spec.Migration == nil ||
+		sourceHelmModule.Spec.Migration.PVC == nil ||
+		!sourceHelmModule.Spec.Migration.PVC.Enabled ||
+		len(sourceHelmModule.Spec.Migration.PVC.Names) == 0 {
+		return nil
+	}
+
+	// Hibernate destination module and wait for it to sleep
+	if err := r.hibernateModuleAndWait(ctx, destModule, "destination"); err != nil {
+		return err
+	}
+
+	defer func() {
+		patch := client.MergeFrom(destModule.DeepCopy())
+		destModule.Spec.Hibernated = utils.ToPtr(false)
+		if err := r.Patch(ctx, destModule, patch); err != nil {
+			log.Error(err, "failed to update destination module to hibernate state")
+		}
+	}()
+
+	// Hibernate source module and wait for it to sleep
+	sourceModuleOldHibernationStatus := sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated
+	if err := r.hibernateModuleAndWait(ctx, sourceModule, "source"); err != nil {
+		return err
+	}
+
+	defer func() {
+		if sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated != sourceModuleOldHibernationStatus {
+			patch := client.MergeFrom(sourceModule.DeepCopy())
+			sourceModule.Spec.Hibernated = utils.ToPtr(sourceModuleOldHibernationStatus)
+			if err := r.Patch(ctx, sourceModule, patch); err != nil {
+				log.Error(err, "failed to restore source module hibernation state")
+			}
+		}
+	}()
+
+	// Parse destination Helm module
+	destHelmModule, err := ParseHelmModule(ctx, destModule)
+	if err != nil {
+		return fmt.Errorf("failed to parse destination Helm module: %w", err)
+	}
+
+	// Perform PVC migration
+	if err := r.migratePVCs(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
+		return fmt.Errorf("failed to migrate PVCs: %w", err)
 	}
 
 	return nil
@@ -114,7 +185,8 @@ func (r *WorkspaceReconciler) migratePVCs(
 	// Check if PVC migration is enabled
 	if sourceHelmModule.Spec.Migration == nil ||
 		sourceHelmModule.Spec.Migration.PVC == nil ||
-		!sourceHelmModule.Spec.Migration.PVC.Enabled {
+		!sourceHelmModule.Spec.Migration.PVC.Enabled ||
+		len(sourceHelmModule.Spec.Migration.PVC.Names) == 0 {
 		return nil
 	}
 
@@ -174,67 +246,6 @@ func (r *WorkspaceReconciler) migratePVCs(
 				"destinationPVC", destHelmModule.Spec.Migration.PVC.Names[i],
 				"destinationNamespace", destHelmModule.Spec.Namespace)
 		}
-	}
-
-	return nil
-}
-
-func (r *WorkspaceReconciler) migrateModuleData(
-	ctx context.Context,
-	sourceModule, destModule *batchv1.Module,
-	sourceWorkspace, destWorkspace *batchv1.Workspace,
-) error {
-	log := logf.FromContext(ctx)
-
-	// Only Helm modules support data migration
-	if !IsHelmModule(sourceModule) || !IsHelmModule(destModule) {
-		return nil
-	}
-
-	// Hibernate destination module and wait for it to sleep
-	if err := r.hibernateModuleAndWait(ctx, destModule, "destination"); err != nil {
-		return err
-	}
-
-	defer func() {
-		patch := client.MergeFrom(destModule.DeepCopy())
-		destModule.Spec.Hibernated = utils.ToPtr(false)
-		if err := r.Patch(ctx, destModule, patch); err != nil {
-			log.Error(err, "failed to update destination module to hibernate state")
-		}
-	}()
-
-	// Hibernate source module and wait for it to sleep
-	sourceModuleOldHibernationStatus := sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated
-	if err := r.hibernateModuleAndWait(ctx, sourceModule, "source"); err != nil {
-		return err
-	}
-
-	defer func() {
-		if sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated != sourceModuleOldHibernationStatus {
-			patch := client.MergeFrom(sourceModule.DeepCopy())
-			sourceModule.Spec.Hibernated = utils.ToPtr(sourceModuleOldHibernationStatus)
-			if err := r.Patch(ctx, sourceModule, patch); err != nil {
-				log.Error(err, "failed to restore source module hibernation state")
-			}
-		}
-	}()
-
-	// Parse source Helm module
-	sourceHelmModule, err := ParseHelmModule(ctx, sourceModule)
-	if err != nil {
-		return fmt.Errorf("failed to parse source Helm module: %w", err)
-	}
-
-	// Parse destination Helm module
-	destHelmModule, err := ParseHelmModule(ctx, destModule)
-	if err != nil {
-		return fmt.Errorf("failed to parse destination Helm module: %w", err)
-	}
-
-	// Perform PVC migration
-	if err := r.migratePVCs(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
-		return fmt.Errorf("failed to migrate PVCs: %w", err)
 	}
 
 	return nil
