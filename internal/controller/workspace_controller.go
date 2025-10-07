@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -556,6 +555,7 @@ func (r *WorkspaceReconciler) forkWorkspace(
 
 			if err := r.migrateModuleData(ctx, &module, newModule, sourceWorkspace, destWorkspace); err != nil {
 				log.Error(err, "failed to migrate module data", "module_name", module.Name, "module_namespace", module.Namespace)
+				r.Recorder.Event(destWorkspace, "Warning", "DataMigration", fmt.Sprintf("Failed to migrate data for new module %s/%s (from source %s/%s): %v", newModule.Namespace, newModule.Name, module.Namespace, module.Name, err))
 			}
 		}()
 	}
@@ -610,6 +610,14 @@ func (r *WorkspaceReconciler) migrateModuleData(
 		}
 	}
 
+	defer func() {
+		patch := client.MergeFrom(destModule.DeepCopy())
+		destModule.Spec.Hibernated = utils.ToPtr(false)
+		if err := r.Patch(ctx, destModule, patch); err != nil {
+			log.Error(err, "failed to update destination module to hibernate state")
+		}
+	}()
+
 waitForSleepedDestModuleState:
 	for range 180 {
 		if err := r.Get(ctx, client.ObjectKeyFromObject(destModule), destModule); err != nil {
@@ -635,13 +643,25 @@ waitForSleepedDestModuleState:
 		return fmt.Errorf("timed out waiting for destination module %s/%s to become hibernated, current phase: %s", destModule.Namespace, destModule.Name, destModule.Status.Phase)
 	}
 
+	sourceModuleOldHibernationStatus := true
 	if sourceModule.Spec.Hibernated == nil || utils.NotNilAndNot(sourceModule.Spec.Hibernated, true) {
 		patch := client.MergeFrom(sourceModule.DeepCopy())
 		sourceModule.Spec.Hibernated = utils.ToPtr(true)
+		sourceModuleOldHibernationStatus = false
 		if err := r.Patch(ctx, sourceModule, patch); err != nil {
 			return err
 		}
 	}
+
+	defer func() {
+		if sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated != sourceModuleOldHibernationStatus {
+			patch := client.MergeFrom(sourceModule.DeepCopy())
+			sourceModule.Spec.Hibernated = utils.ToPtr(sourceModuleOldHibernationStatus)
+			if err := r.Patch(ctx, sourceModule, patch); err != nil {
+				log.Error(err, "failed to update source module to hibernate state")
+			}
+		}
+	}()
 
 waitForSleepedSourceModuleState:
 	for range 180 {
@@ -668,11 +688,7 @@ waitForSleepedSourceModuleState:
 		return fmt.Errorf("timed out waiting for source module %s/%s to become hibernated, current phase: %s", sourceModule.Namespace, sourceModule.Name, sourceModule.Status.Phase)
 	}
 
-	var (
-		// sourceHelmService *services.HelmService
-		// sourcePVCs        *corev1.PersistentVolumeClaimList
-		sourceHelmModule resources.HelmModule
-	)
+	var sourceHelmModule resources.HelmModule
 	{
 		resourceAnnotation := sourceModule.Annotations[types.ModuleAnnotationKeys.Resource]
 		if resourceAnnotation == "" {
@@ -710,16 +726,6 @@ waitForSleepedSourceModuleState:
 					return fmt.Errorf("failed to render Helm module spec: %v", err)
 				}
 				sourceHelmModule = helmModule
-
-				// sourceHelmService, err := NewHelmService(ctx, sourceWorkspace.Spec.Connection, r.Client)
-				// if err != nil {
-				// 	return err
-				// }
-
-				// sourcePVCs, err = sourceHelmService.ListPVCs(ctx, releaseName, helmModule.Spec.Namespace)
-				// if err != nil {
-				// 	return err
-				// }
 
 				return nil
 			},
@@ -780,29 +786,7 @@ waitForSleepedSourceModuleState:
 
 				// Convert rest.Config to kubeconfig format and write to files
 				destKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("dest-kubeconfig-%s-*.yaml", destWorkspace.Name))
-				destKubeconfigData, err := clientcmd.Write(clientcmdapi.Config{
-					Clusters: map[string]*clientcmdapi.Cluster{
-						"default": {
-							Server:                   destKubeConfig.Host,
-							CertificateAuthorityData: destKubeConfig.CAData,
-							InsecureSkipTLSVerify:    destKubeConfig.Insecure || len(destKubeConfig.CAData) == 0,
-						},
-					},
-					AuthInfos: map[string]*clientcmdapi.AuthInfo{
-						"default": {
-							ClientCertificateData: destKubeConfig.CertData,
-							ClientKeyData:         destKubeConfig.KeyData,
-							Token:                 destKubeConfig.BearerToken,
-						},
-					},
-					Contexts: map[string]*clientcmdapi.Context{
-						"default": {
-							Cluster:  "default",
-							AuthInfo: "default",
-						},
-					},
-					CurrentContext: "default",
-				})
+				destKubeconfigData, err := clientcmd.Write(*ConvertRestConfigToAPIConfig(destKubeConfig, "", "", ""))
 				if err != nil {
 					return err
 				}
@@ -811,29 +795,7 @@ waitForSleepedSourceModuleState:
 				}
 
 				sourceKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("source-kubeconfig-%s-*.yaml", sourceWorkspace.Name))
-				sourceKubeconfigData, err := clientcmd.Write(clientcmdapi.Config{
-					Clusters: map[string]*clientcmdapi.Cluster{
-						"default": {
-							Server:                   sourceKubeConfig.Host,
-							CertificateAuthorityData: sourceKubeConfig.CAData,
-							InsecureSkipTLSVerify:    sourceKubeConfig.Insecure || len(sourceKubeConfig.CAData) == 0,
-						},
-					},
-					AuthInfos: map[string]*clientcmdapi.AuthInfo{
-						"default": {
-							ClientCertificateData: sourceKubeConfig.CertData,
-							ClientKeyData:         sourceKubeConfig.KeyData,
-							Token:                 sourceKubeConfig.BearerToken,
-						},
-					},
-					Contexts: map[string]*clientcmdapi.Context{
-						"default": {
-							Cluster:  "default",
-							AuthInfo: "default",
-						},
-					},
-					CurrentContext: "default",
-				})
+				sourceKubeconfigData, err := clientcmd.Write(*ConvertRestConfigToAPIConfig(sourceKubeConfig, "", "", ""))
 				if err != nil {
 					return err
 				}
@@ -858,8 +820,12 @@ waitForSleepedSourceModuleState:
 					}
 				}
 
-				_ = os.Remove(destKubeconfigPath)
-				_ = os.Remove(sourceKubeconfigPath)
+				if err = os.Remove(destKubeconfigPath); err != nil {
+					log.Error(err, "failed to remove temp destination kubeconfig file", "path", destKubeconfigPath)
+				}
+				if err = os.Remove(sourceKubeconfigPath); err != nil {
+					log.Error(err, "failed to remove temp source kubeconfig file", "path", sourceKubeconfigPath)
+				}
 
 				return nil
 			},
@@ -867,22 +833,6 @@ waitForSleepedSourceModuleState:
 		)
 		if err != nil {
 			return err
-		}
-	}
-
-	if sourceModule.Spec.Hibernated == nil || utils.NotNilAndZero(sourceModule.Spec.Hibernated) {
-		patch := client.MergeFrom(sourceModule.DeepCopy())
-		sourceModule.Spec.Hibernated = utils.ToPtr(false)
-		if err := r.Patch(ctx, sourceModule, patch); err != nil {
-			log.Error(err, "failed to update source module to hibernate state")
-		}
-	}
-
-	if destModule.Spec.Hibernated == nil || utils.NotNilAndZero(destModule.Spec.Hibernated) {
-		patch := client.MergeFrom(destModule.DeepCopy())
-		destModule.Spec.Hibernated = utils.ToPtr(false)
-		if err := r.Patch(ctx, destModule, patch); err != nil {
-			log.Error(err, "failed to update destination module to hibernate state")
 		}
 	}
 
