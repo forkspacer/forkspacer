@@ -98,12 +98,16 @@ spec:
               from:
                 description: '*optional'
                 properties:
+                  migrateData:
+                    default: false
+                    type: boolean
                   name:
                     type: string
                   namespace:
                     default: default
                     type: string
                 required:
+                - migrateData
                 - name
                 - namespace
                 type: object

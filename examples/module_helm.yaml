@@ -74,6 +74,12 @@ spec:
           removeNamespace: false
           removePVCs: true
 
+        migration:
+          pvc:
+            enabled: true
+            names:
+              - "redis-data-{{.releaseName}}-master-0"
+
   workspace:
     name: default
     namespace: default

@@ -93,7 +93,9 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	default:
 		log.Error(errors.New("unknown module phase"), "encountered unknown module phase", "phase", module.Status.Phase)
-		r.Recorder.Event(module, "Warning", "InternalError", fmt.Sprintf("encountered unknown module phase: %s", module.Status.Phase))
+		r.Recorder.Event(module, "Warning", "InternalError",
+			fmt.Sprintf("encountered unknown module phase: %s", module.Status.Phase),
+		)
 		return ctrl.Result{}, nil
 	}
 }
@@ -158,7 +160,10 @@ func (r *ModuleReconciler) handleEmptyPhase(ctx context.Context, module *batchv1
 		log.Error(err, "module installation failed")
 		r.Recorder.Event(module, "Warning", "InstallError", fmt.Sprintf("Module installation failed: %v", err))
 
-		if err := r.setPhase(ctx, module, batchv1.ModulePhaseFailed, utils.ToPtr("Module installation failed. Check events for more information.")); err != nil {
+		if err := r.setPhase(
+			ctx, module, batchv1.ModulePhaseFailed,
+			utils.ToPtr("Module installation failed. Check events for more information."),
+		); err != nil {
 			log.Error(err, "failed to update module status to Failed after installation error")
 			return ctrl.Result{}, err
 		}
@@ -212,7 +217,12 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	return ctrl.Result{RequeueAfter: time.Second * 2}, nil
 }
 
-func (r *ModuleReconciler) setPhase(ctx context.Context, module *batchv1.Module, phase batchv1.ModulePhaseType, message *string) error {
+func (r *ModuleReconciler) setPhase(
+	ctx context.Context,
+	module *batchv1.Module,
+	phase batchv1.ModulePhaseType,
+	message *string,
+) error {
 	return retry.RetryOnConflict(
 		retry.DefaultRetry,
 		func() error {
@@ -245,8 +255,14 @@ func (r *ModuleReconciler) newManager(
 
 	err := resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
-			releaseName := getHelmReleaseNameFromModule(*module)
-			metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+			var releaseName string
+			metaDataReleaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName]
+			if ok {
+				releaseName = metaDataReleaseName.(string)
+			} else {
+				releaseName = newHelmReleaseNameFromModule(*module)
+				metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+			}
 
 			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
 			if err != nil {
@@ -289,15 +305,24 @@ func (r *ModuleReconciler) newManager(
 	return iManager, err
 }
 
-func (r *ModuleReconciler) newHelmService(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*services.HelmService, error) {
+func (r *ModuleReconciler) newHelmService(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+) (*services.HelmService, error) {
 	return NewHelmService(ctx, workspaceConn, r.Client)
 }
 
-func (r *ModuleReconciler) newKubernetesConfig(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*rest.Config, error) {
+func (r *ModuleReconciler) newKubernetesConfig(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+) (*rest.Config, error) {
 	return NewKubernetesConfig(ctx, workspaceConn, r.Client)
 }
 
-func (r *ModuleReconciler) getWorkspace(ctx context.Context, workspaceRef *batchv1.ModuleWorkspaceReference) (*batchv1.Workspace, error) {
+func (r *ModuleReconciler) getWorkspace(
+	ctx context.Context,
+	workspaceRef *batchv1.ModuleWorkspaceReference,
+) (*batchv1.Workspace, error) {
 	workspace := &batchv1.Workspace{}
 	namespacedName := client.ObjectKey{
 		Name:      workspaceRef.Name,
