@@ -1,14 +1,7 @@
 name: Deploy Helm Charts to GitHub Pages
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Helm chart version (e.g., 0.1.5)'
-        required: true
 
 permissions:
   contents: read
@@ -28,90 +21,141 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4.2.0
 
-      - name: Extract version
+      - name: Extract version from Chart.yaml
         id: version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            # Tag push - extract version from tag
-            VERSION=${GITHUB_REF#refs/tags/v}
-            TAG=$GITHUB_REF_NAME
-          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
-            # Manual trigger with input version
-            VERSION="${{ github.event.inputs.version }}"
-            TAG="v$VERSION"
-          else
-            # Fallback to Chart.yaml version
-            VERSION=$(grep "^version:" helm/Chart.yaml | awk '{print $2}')
-            TAG="v$VERSION"
+          if [ ! -f "helm/Chart.yaml" ]; then
+            echo "❌ Error: helm/Chart.yaml not found"
+            exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          
+          # Extract version and appVersion from Chart.yaml
+          CHART_VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          APP_VERSION=$(grep '^appVersion:' helm/Chart.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          
+          if [ -z "$CHART_VERSION" ]; then
+            echo "❌ Error: Could not extract version from Chart.yaml"
+            exit 1
+          fi
+          
+          if [ -z "$APP_VERSION" ]; then
+            echo "❌ Error: Could not extract appVersion from Chart.yaml"
+            exit 1
+          fi
+          
+          echo "version=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          
+          echo "📦 Chart Version: $CHART_VERSION"
+          echo "🚀 App Version: $APP_VERSION"
+
+      - name: Validate version format
+        run: |
+          CHART_VERSION="${{ steps.version.outputs.version }}"
+          APP_VERSION="${{ steps.version.outputs.app_version }}"
+          
+          # Validate chart version (semantic versioning)
+          if ! [[ "$CHART_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid chart version format: $CHART_VERSION"
+            echo "Expected: X.Y.Z or X.Y.Z-suffix (e.g., 0.1.5, 1.2.3-beta.1)"
+            exit 1
+          fi
+          
+          # Validate app version (flexible format with v prefix)
+          APP_VERSION_CLEAN="${APP_VERSION#v}"
+          if ! [[ "$APP_VERSION_CLEAN" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid app version format: $APP_VERSION"
+            echo "Expected: vX.Y.Z or X.Y.Z (e.g., v0.1.5, 0.1.5, v1.2.3-beta.1)"
+            exit 1
+          fi
+          
+          echo "✅ Version formats valid"
+          echo "  Chart Version: $CHART_VERSION"
+          echo "  App Version: $APP_VERSION"
 
       - name: Package Helm Chart
         id: package
         run: |
-          # Create temporary copy and update versions
-          cp -r helm /tmp/helm-package
-          sed -i "s/version: .*/version: ${{ steps.version.outputs.version }}/" /tmp/helm-package/Chart.yaml
-          sed -i "s/appVersion: .*/appVersion: \"${{ steps.version.outputs.tag }}\"/" /tmp/helm-package/Chart.yaml
+          CHART_VERSION="${{ steps.version.outputs.version }}"
           
-          # Package chart
-          helm package /tmp/helm-package
-          CHART_FILE=$(ls forkspacer-*.tgz)
+          # Package chart directly from helm directory
+          helm package helm/
+          
+          CHART_FILE="forkspacer-${CHART_VERSION}.tgz"
+          
+          # Verify it exists
+          if [ ! -f "$CHART_FILE" ]; then
+            echo "❌ Error: Expected chart file not found: $CHART_FILE"
+            echo "Available files:"
+            ls -la *.tgz 2>&1 || echo "No .tgz files found"
+            exit 1
+          fi
+          
           echo "chart_file=$CHART_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Packaged: $CHART_FILE ($(du -h $CHART_FILE | cut -f1))"
+
 
       - name: Create charts directory
         run: |
+          CHART_VERSION="${{ steps.version.outputs.version }}"
+          CHART_FILE="${{ steps.package.outputs.chart_file }}"
+          
           # Create a charts directory for GitHub Pages
           mkdir -p charts-site
-          
-          # Copy all existing charts (if any) and new chart
-          cp *.tgz charts-site/ 2>/dev/null || true
+
+          echo "📥 Fetching existing charts from GitHub Pages..."
+
+          if curl -fsSL https://forkspacer.github.io/forkspacer/index.yaml -o /tmp/current-index.yaml 2>/dev/null; then
+            echo "✅ Found existing Helm repository"
+
+            # Extract all chart URLs from index.yaml
+            grep -oP 'https://forkspacer\.github\.io/forkspacer/forkspacer-[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?\.tgz' /tmp/current-index.yaml | sort -u | while read url; do
+              filename=$(basename "$url")
+
+              # Skip if this is the version we're about to deploy
+              if [[ "$filename" == "forkspacer-${CHART_VERSION}.tgz" ]]; then
+                echo "  ⏭️  Skipping $filename (will be replaced)"
+                continue
+              fi
+
+              echo "  📥 Downloading $filename..."
+              if curl -fsSL "$url" -o "charts-site/$filename"; then
+                echo "  ✅ Downloaded $filename"
+              else
+                echo "  ⚠️  Failed to download $filename"
+              fi
+            done
+
+            echo "✅ Downloaded $(ls charts-site/forkspacer-*.tgz 2>/dev/null | wc -l) existing chart(s)"
+          else
+            echo "ℹ️  No existing charts found (first deployment)"
+          fi
+
+          # Copy the newly packaged chart
+          cp "$CHART_FILE" charts-site/
+          echo "✅ Added new chart: $CHART_FILE"
           
           # Generate repository index
           helm repo index charts-site/ --url https://forkspacer.github.io/forkspacer
           
-          # Create simple index.html for the site
-          cat > charts-site/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Forkspacer Helm Charts</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; }
-                  .container { max-width: 800px; }
-                  pre { background: #f4f4f4; padding: 15px; border-radius: 5px; }
-                  .chart { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🚀 Forkspacer Helm Charts</h1>
-                  <p>Kubernetes operator for dynamic workspace lifecycle management</p>
-                  
-                  <h2>📦 Installation</h2>
-                  <pre>helm repo add forkspacer https://forkspacer.github.io/forkspacer
-          helm repo update
-          helm install forkspacer forkspacer/forkspacer --namespace operator-system --create-namespace</pre>
-                  
-                  <h2>📋 Available Charts</h2>
-                  <div class="chart">
-                      <h3>forkspacer</h3>
-                      <p>A Kubernetes operator for dynamic workspace lifecycle management</p>
-                      <a href="https://github.com/forkspacer/forkspacer">View on GitHub</a>
-                  </div>
-                  
-                  <h2>📄 Files</h2>
-                  <ul>
-                      <li><a href="index.yaml">index.yaml</a> - Helm repository index</li>
-                  </ul>
-              </div>
-          </body>
-          </html>
-          EOF
+          # Generate index.html from template
+          if [ -f ".github/templates/helm-page.html" ]; then
+            cp .github/templates/helm-page.html charts-site/index.html
+            
+            # Replace version placeholders
+            sed -i "s/{{VERSION_TAG}}/${{ steps.version.outputs.app_version }}/g" charts-site/index.html
+            sed -i "s/{{VERSION_NUMBER}}/${{ steps.version.outputs.version }}/g" charts-site/index.html
+            
+            echo "✅ Generated index.html from template"
+          else
+            echo "⚠️  Warning: .github/templates/helm-page.html not found, skipping HTML generation"
+          fi
           
-          echo "✅ Created charts site with ${{ steps.package.outputs.chart_file }}"
-          ls -la charts-site/
+          echo "✅ Created charts site with $(ls charts-site/forkspacer-*.tgz 2>/dev/null | wc -l) chart version(s)"
+          echo ""
+          echo "📦 Available versions:"
+          ls -lh charts-site/forkspacer-*.tgz || echo "No charts found"
+
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -125,27 +169,10 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{ steps.package.outputs.chart_file }}
-          body: |
-            ## 🚀 Helm Installation
-            
-            ```bash
-            helm repo add forkspacer https://forkspacer.github.io/forkspacer
-            helm repo update
-            helm install forkspacer forkspacer/forkspacer --version ${{ steps.version.outputs.version }}
-            ```
-            
-            ## 📋 Chart Repository
-            Visit: https://forkspacer.github.io/forkspacer
-
       - name: Summary
         run: |
           echo "## 🎉 Helm Charts Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart**: ${{ steps.package.outputs.chart_file }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Repository**: https://forkspacer.github.io/forkspacer" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
