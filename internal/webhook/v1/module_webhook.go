@@ -48,6 +48,7 @@ func SetupModuleWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
+//nolint:lll
 // +kubebuilder:webhook:path=/mutate-batch-forkspacer-com-v1-module,mutating=true,failurePolicy=fail,sideEffects=None,groups=batch.forkspacer.com,resources=modules,verbs=create;update,versions=v1,name=mmodule-v1.kb.io,admissionReviewVersions=v1
 
 // ModuleCustomDefaulter struct is responsible for setting default values on the custom resource of the
@@ -75,6 +76,7 @@ func (d *ModuleCustomDefaulter) Default(_ context.Context, obj runtime.Object) e
 	return nil
 }
 
+//nolint:lll
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
@@ -103,7 +105,10 @@ func (v *ModuleCustomValidator) ValidateCreate(ctx context.Context, obj runtime.
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Module.
-func (v *ModuleCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ModuleCustomValidator) ValidateUpdate(
+	ctx context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	module, ok := newObj.(*batchv1.Module)
 	if !ok {
 		return nil, fmt.Errorf("expected a Module object for the newObj but got %T", newObj)
@@ -177,7 +182,11 @@ func validateModuleSource(moduleSource batchv1.ModuleSource, fldPath *field.Path
 		switch moduleURLParsed.Scheme {
 		case "http", "https":
 		default:
-			return field.Invalid(fldPath.Child("httpURL"), *moduleSource.HttpURL, fmt.Sprintf("unsupported Http URL scheme, got '%s'", moduleURLParsed.Scheme))
+			return field.Invalid(
+				fldPath.Child("httpURL"),
+				*moduleSource.HttpURL,
+				fmt.Sprintf("unsupported Http URL scheme, got '%s'", moduleURLParsed.Scheme),
+			)
 		}
 
 		return nil

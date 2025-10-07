@@ -37,7 +37,6 @@ linters:
         path: api/*
       - linters:
           - dupl
-          - lll
         path: internal/*
       - linters:
           - unparam

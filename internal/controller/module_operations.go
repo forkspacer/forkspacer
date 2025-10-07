@@ -89,7 +89,10 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		utils.UpdateMap(&module.Annotations, annotations)
 		if err = r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with install annotations", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with install annotations",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if installErr != nil {
@@ -220,7 +223,10 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 		patch := client.MergeFrom(module.DeepCopy())
 		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		if err := r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with meta data annotations after sleep", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with meta data annotations after sleep",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if sleepErr != nil {
@@ -286,7 +292,10 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 		patch := client.MergeFrom(module.DeepCopy())
 		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		if err := r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with meta data annotations after resume", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with meta data annotations after resume",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if resumeErr != nil {
@@ -334,7 +343,10 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, annotations)
 	if err := r.Patch(ctx, module, patch); err != nil {
-		log.Error(err, "failed to patch module with adoption annotations", "module", module.Name, "namespace", module.Namespace)
+		log.Error(err,
+			"failed to patch module with adoption annotations",
+			"module", module.Name, "namespace", module.Namespace,
+		)
 		return err
 	}
 

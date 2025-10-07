@@ -98,7 +98,10 @@ func newHelmReleaseNameFromModule(module batchv1.Module) string {
 }
 
 // ConvertRestConfigToAPIConfig converts a *rest.Config to an api.Config (kubeconfig format)
-func ConvertRestConfigToAPIConfig(restConfig *rest.Config, contextName, clusterName, userName string) *clientcmdapi.Config {
+func ConvertRestConfigToAPIConfig(
+	restConfig *rest.Config,
+	contextName, clusterName, userName string,
+) *clientcmdapi.Config {
 	if contextName == "" {
 		contextName = "default"
 	}
@@ -203,7 +206,8 @@ func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.Hel
 
 	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
-		return resources.HelmModule{}, fmt.Errorf("module %s/%s is missing resource annotation", module.Namespace, module.Name)
+		return resources.HelmModule{},
+			fmt.Errorf("module %s/%s is missing resource annotation", module.Namespace, module.Name)
 	}
 
 	managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]

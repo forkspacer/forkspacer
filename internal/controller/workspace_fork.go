@@ -26,7 +26,10 @@ func (r *WorkspaceReconciler) forkWorkspace(
 
 	modules, err := r.getRelatedModules(ctx, sourceWorkspace.Namespace, sourceWorkspace.Name)
 	if err != nil {
-		return fmt.Errorf("failed to get related modules for source workspace %s/%s: %w", sourceWorkspace.Namespace, sourceWorkspace.Name, err)
+		return fmt.Errorf(
+			"failed to get related modules for source workspace %s/%s: %w",
+			sourceWorkspace.Namespace, sourceWorkspace.Name, err,
+		)
 	}
 
 	const maxNameLength = 253
@@ -58,7 +61,11 @@ func (r *WorkspaceReconciler) forkWorkspace(
 				},
 			}
 			if err = r.Create(ctx, newModule); err != nil {
-				log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
+				log.Error(err,
+					"failed to create module from source workspace",
+					"module_name", module.Name,
+					"module_namespace", module.Namespace,
+				)
 				return
 			}
 
@@ -67,7 +74,11 @@ func (r *WorkspaceReconciler) forkWorkspace(
 		waitForInitialNewModuleState:
 			for range 180 {
 				if err := r.Get(ctx, client.ObjectKeyFromObject(newModule), newModule); err != nil {
-					log.Error(err, "failed to get new module during initial creation wait", "module_name", newModule.Name, "module_namespace", newModule.Namespace)
+					log.Error(err,
+						"failed to get new module during initial creation wait",
+						"module_name", newModule.Name,
+						"module_namespace", newModule.Namespace,
+					)
 					time.Sleep(time.Second * 3)
 					continue
 				}
@@ -81,7 +92,13 @@ func (r *WorkspaceReconciler) forkWorkspace(
 				case batchv1.ModulePhaseUninstalling, batchv1.ModulePhaseFailed:
 					return
 				default:
-					log.Error(errors.New("unexpected new module phase encountered"), "encountered unexpected new module phase during initial creation wait", "module_name", newModule.Name, "module_namespace", newModule.Namespace, "phase", newModule.Status.Phase)
+					log.Error(
+						errors.New("unexpected new module phase encountered"),
+						"encountered unexpected new module phase during initial creation wait",
+						"module_name", newModule.Name,
+						"module_namespace", newModule.Namespace,
+						"phase", newModule.Status.Phase,
+					)
 					return
 				}
 			}
@@ -89,14 +106,25 @@ func (r *WorkspaceReconciler) forkWorkspace(
 			switch newModule.Status.Phase {
 			case batchv1.ModulePhaseReady, batchv1.ModulePhaseSleeped:
 			default:
-				log.Error(errors.New("new module did not become ready or hibernated within the expected timeout"), "timed out waiting for new module to become ready or hibernated", "module_name", newModule.Name, "module_namespace", newModule.Namespace, "final_phase", newModule.Status.Phase)
+				log.Error(
+					errors.New("new module did not become ready or hibernated within the expected timeout"),
+					"timed out waiting for new module to become ready or hibernated",
+					"module_name", newModule.Name,
+					"module_namespace", newModule.Namespace,
+					"final_phase", newModule.Status.Phase,
+				)
 				return
 			}
 
 			if destWorkspace.Spec.From.MigrateData {
 				if err := r.migrateModuleData(ctx, &module, newModule, sourceWorkspace, destWorkspace); err != nil {
 					log.Error(err, "failed to migrate module data", "module_name", module.Name, "module_namespace", module.Namespace)
-					r.Recorder.Event(destWorkspace, "Warning", "DataMigration", fmt.Sprintf("Failed to migrate data for new module %s/%s (from source %s/%s): %v", newModule.Namespace, newModule.Name, module.Namespace, module.Name, err))
+					r.Recorder.Event(destWorkspace, "Warning", "DataMigration",
+						fmt.Sprintf(
+							"Failed to migrate data for new module %s/%s (from source %s/%s): %v",
+							newModule.Namespace, newModule.Name, module.Namespace, module.Name, err,
+						),
+					)
 				}
 			}
 		}()
