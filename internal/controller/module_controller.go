@@ -35,11 +35,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
-	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
@@ -181,7 +181,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	log := logf.FromContext(ctx)
 
 	// Sleep
-	if module.Status.Phase == batchv1.ModulePhaseReady && utils.NotNilAndZero(module.Spec.Hibernated) {
+	if module.Status.Phase == batchv1.ModulePhaseReady && module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseSleeping, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -198,7 +198,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	}
 
 	// Resume
-	if module.Status.Phase == batchv1.ModulePhaseSleeped && utils.NotNilAndNot(module.Spec.Hibernated, true) {
+	if module.Status.Phase == batchv1.ModulePhaseSleeped && !module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseResuming, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -296,7 +296,7 @@ func (r *ModuleReconciler) newManager(
 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, map[string]string{
-		types.ModuleAnnotationKeys.ManagerData: metaData.String(),
+		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
 	})
 	if err := r.Patch(ctx, module, patch); err != nil {
 		log.Error(err, "failed to patch module with manager data", "module", module.Name, "namespace", module.Namespace)

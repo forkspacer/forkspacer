@@ -11,7 +11,6 @@ import (
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
-	"github.com/forkspacer/forkspacer/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -166,22 +165,22 @@ func (r *WorkspaceReconciler) migrateModuleData(
 
 	defer func() {
 		patch := client.MergeFrom(destModule.DeepCopy())
-		destModule.Spec.Hibernated = utils.ToPtr(false)
+		destModule.Spec.Hibernated = false
 		if err := r.Patch(ctx, destModule, patch); err != nil {
 			log.Error(err, "failed to update destination module to hibernate state")
 		}
 	}()
 
 	// Hibernate source module and wait for it to sleep
-	sourceModuleOldHibernationStatus := sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated
+	sourceModuleOldHibernationStatus := sourceModule.Spec.Hibernated
 	if err := r.hibernateModuleAndWait(ctx, sourceModule, "source"); err != nil {
 		return err
 	}
 
 	defer func() {
-		if sourceModule.Spec.Hibernated != nil && *sourceModule.Spec.Hibernated != sourceModuleOldHibernationStatus {
+		if sourceModule.Spec.Hibernated != sourceModuleOldHibernationStatus {
 			patch := client.MergeFrom(sourceModule.DeepCopy())
-			sourceModule.Spec.Hibernated = utils.ToPtr(sourceModuleOldHibernationStatus)
+			sourceModule.Spec.Hibernated = sourceModuleOldHibernationStatus
 			if err := r.Patch(ctx, sourceModule, patch); err != nil {
 				log.Error(err, "failed to restore source module hibernation state")
 			}
@@ -222,13 +221,13 @@ func (r *WorkspaceReconciler) migratePVCs(
 	pvMigrateService := services.NewPVMigrateService(nil)
 
 	// Get kubeconfig for destination workspace
-	destKubeConfig, err := NewKubernetesConfig(ctx, destWorkspace.Spec.Connection, r.Client)
+	destKubeConfig, err := NewKubernetesConfig(ctx, &destWorkspace.Spec.Connection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to get destination kubeconfig: %w", err)
 	}
 
 	// Get kubeconfig for source workspace
-	sourceKubeConfig, err := NewKubernetesConfig(ctx, sourceWorkspace.Spec.Connection, r.Client)
+	sourceKubeConfig, err := NewKubernetesConfig(ctx, &sourceWorkspace.Spec.Connection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to get source kubeconfig: %w", err)
 	}

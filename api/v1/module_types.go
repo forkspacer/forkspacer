@@ -36,12 +36,28 @@ const (
 
 type ModuleSourceGithubSpec struct{}
 
-type ModuleSourceExistingHelmReleaseRef struct {
+type ModuleSourceConfigMapRef struct {
 	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
+}
+
+type ModuleSourceExistingHelmReleaseRef struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
 }
 
 type ModuleSource struct {
@@ -61,17 +77,15 @@ type ModuleSource struct {
 	ExistingHelmRelease *ModuleSourceExistingHelmReleaseRef `json:"existingHelmRelease,omitempty"`
 }
 
-type ModuleSourceConfigMapRef struct {
-	Name      string `json:"name,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-}
-
 type ModuleWorkspaceReference struct {
 	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
-	// +optional
 	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
 }
 
@@ -86,9 +100,8 @@ type ModuleSpec struct {
 	// +optional
 	Config *runtime.RawExtension `json:"config,omitempty"`
 
-	// +optional
 	// +kubebuilder:default=false
-	Hibernated *bool `json:"hibernated,omitempty"`
+	Hibernated bool `json:"hibernated"`
 }
 
 // ModuleStatus defines the observed state of Module.

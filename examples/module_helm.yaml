@@ -82,7 +82,7 @@ spec:
 
   workspace:
     name: default
-    namespace: default
+    # namespace: default
 
   config:
     version: 21.2.7

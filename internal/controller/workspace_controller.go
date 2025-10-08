@@ -36,7 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	"github.com/forkspacer/forkspacer/pkg/types"
+	cronCons "github.com/forkspacer/forkspacer/pkg/constants/cron"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
@@ -131,12 +131,12 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.sleepCronManager = &sleepCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.resumeCronManager = &resumeCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.sleepCronManager.cron.Start()
@@ -157,7 +157,7 @@ func (r *WorkspaceReconciler) addSleepCron(log logr.Logger, workspace *batchv1.W
 
 	if entryID, ok := r.sleepCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
 			if err != nil {
 				return err
 			}
@@ -186,12 +186,12 @@ func (r *WorkspaceReconciler) addSleepCron(log logr.Logger, workspace *batchv1.W
 				return
 			}
 
-			if utils.NotNilAndNot(workspace.Spec.Hibernated, true) {
+			if !workspace.Spec.Hibernated {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 				defer cancel()
 
 				patch := client.MergeFrom(workspace.DeepCopy())
-				*workspace.Spec.Hibernated = true
+				workspace.Spec.Hibernated = true
 				if err := r.Patch(ctx, workspace, patch); err != nil {
 					log.Error(err, "failed to update workspace to hibernate state")
 				}
@@ -226,7 +226,7 @@ func (r *WorkspaceReconciler) addResumeCron(log logr.Logger, workspace *batchv1.
 
 	if entryID, ok := r.resumeCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
 			if err != nil {
 				return err
 			}
@@ -255,12 +255,12 @@ func (r *WorkspaceReconciler) addResumeCron(log logr.Logger, workspace *batchv1.
 				return
 			}
 
-			if utils.NotNilAndZero(workspace.Spec.Hibernated) {
+			if workspace.Spec.Hibernated {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 				defer cancel()
 
 				patch := client.MergeFrom(workspace.DeepCopy())
-				*workspace.Spec.Hibernated = false
+				workspace.Spec.Hibernated = false
 				if err := r.Patch(ctx, workspace, patch); err != nil {
 					log.Error(err, "failed to update workspace to hibernate state")
 				}
@@ -315,7 +315,7 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 	}
 
 	log.Info("New workspace detected, setting initial status")
-	if utils.NotNilAndZero(workspace.Spec.Hibernated) {
+	if workspace.Spec.Hibernated {
 		if err := r.setPhaseHibernated(ctx, workspace, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -425,7 +425,7 @@ func (r *WorkspaceReconciler) handleHibernation(
 	log := logf.FromContext(ctx)
 
 	// Sleep
-	if workspace.Status.HibernatedAt == nil && utils.NotNilAndZero(workspace.Spec.Hibernated) {
+	if workspace.Status.HibernatedAt == nil && workspace.Spec.Hibernated {
 		err := r.sleepModules(ctx, workspace)
 		if err != nil {
 			if err := r.setPhaseFailed(
@@ -446,7 +446,7 @@ func (r *WorkspaceReconciler) handleHibernation(
 	}
 
 	// Resume
-	if workspace.Status.HibernatedAt != nil && utils.NotNilAndNot(workspace.Spec.Hibernated, true) {
+	if workspace.Status.HibernatedAt != nil && !workspace.Spec.Hibernated {
 		err := r.resumeModules(ctx, workspace)
 		if err != nil {
 			if err := r.setPhaseFailed(
@@ -519,9 +519,9 @@ func (r *WorkspaceReconciler) hibernateModuleAndWait(
 ) error {
 	log := logf.FromContext(ctx)
 
-	if module.Spec.Hibernated == nil || utils.NotNilAndNot(module.Spec.Hibernated, true) {
+	if !module.Spec.Hibernated {
 		patch := client.MergeFrom(module.DeepCopy())
-		module.Spec.Hibernated = utils.ToPtr(true)
+		module.Spec.Hibernated = true
 		if err := r.Patch(ctx, module, patch); err != nil {
 			return err
 		}
@@ -586,9 +586,9 @@ func (r *WorkspaceReconciler) sleepModules(ctx context.Context, workspace *batch
 	}
 
 	for _, module := range modules.Items {
-		if module.Spec.Hibernated == nil || utils.NotNilAndNot(module.Spec.Hibernated, true) {
+		if !module.Spec.Hibernated {
 			patch := client.MergeFrom(module.DeepCopy())
-			module.Spec.Hibernated = utils.ToPtr(true)
+			module.Spec.Hibernated = true
 			if err := r.Patch(ctx, &module, patch); err != nil {
 				log.Error(err, "failed to update module to hibernate state")
 			}
@@ -611,9 +611,9 @@ func (r *WorkspaceReconciler) resumeModules(ctx context.Context, workspace *batc
 	}
 
 	for _, module := range modules.Items {
-		if module.Spec.Hibernated == nil || utils.NotNilAndZero(module.Spec.Hibernated) {
+		if !module.Spec.Hibernated {
 			patch := client.MergeFrom(module.DeepCopy())
-			module.Spec.Hibernated = utils.ToPtr(false)
+			module.Spec.Hibernated = false
 			if err := r.Patch(ctx, &module, patch); err != nil {
 				log.Error(err, "failed to update module to hibernate state")
 			}

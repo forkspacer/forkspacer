@@ -47,15 +47,19 @@ const (
 )
 
 type WorkspaceConnectionSecretReference struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
-	// +optional
 	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
 }
 
 type WorkspaceConnection struct {
-	// +kubebuilder:default=local
+	// +kubebuilder:default=in-cluster
 	Type WorkspaceConnectionType `json:"type"`
 
 	// +optional
@@ -63,22 +67,28 @@ type WorkspaceConnection struct {
 }
 
 type WorkspaceAutoHibernation struct {
-	// +optional
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
 
+	// +required
 	// +kubebuilder:validation:MinLength=0
 	Schedule string `json:"schedule"`
 
-	// +kubebuilder:validation:MinLength=0
 	// +optional
+	// +kubebuilder:validation:MinLength=0
 	WakeSchedule *string `json:"wakeSchedule,omitempty"`
 }
 
+// +kubebuilder:validation:MaxProperties=3
 type WorkspaceFromReference struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
 
 	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
 
 	// +kubebuilder:default=false
@@ -87,19 +97,17 @@ type WorkspaceFromReference struct {
 
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
-	// +optional
 	// +kubebuilder:default=kubernetes
 	Type WorkspaceType `json:"type"`
 
-	// *optional
+	// +optional
 	From *WorkspaceFromReference `json:"from,omitempty"`
 
-	// +optional
 	// +kubebuilder:default=false
-	Hibernated *bool `json:"hibernated,omitempty"`
+	Hibernated bool `json:"hibernated"`
 
-	// +optional
-	Connection *WorkspaceConnection `json:"connection,omitempty"`
+	// +kubebuilder:default={type: "in-cluster"}
+	Connection WorkspaceConnection `json:"connection"`
 
 	// +optional
 	AutoHibernation *WorkspaceAutoHibernation `json:"autoHibernation,omitempty"`
@@ -123,7 +131,6 @@ type WorkspaceStatus struct {
 
 	Phase WorkspacePhase `json:"phase"`
 
-	// +optional
 	// +kubebuilder:default=false
 	Ready bool `json:"ready"`
 
