@@ -22,6 +22,9 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= docker
 
+GITHUB_OUTPUT ?= /dev/null
+GITHUB_STEP_SUMMARY ?= /dev/null
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -176,17 +179,121 @@ docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
 .PHONY: helm-sync
-helm-sync: build-installer ## Sync Kubebuilder manifests into Helm chart templates
-	@echo "🔄 Syncing Kubebuilder manifests into Helm chart..."
-	mkdir -p helm/templates
-	cp dist/install.yaml helm/templates/all.yaml
-	@echo "✅ Synced to helm/templates/all.yaml"
+helm-sync: build-installer ## Generate Helm chart via Kubebuilder and move templates into helm folder
+	@echo "🔧 Running Kubebuilder Helm plugin..."
+	kubebuilder edit --plugins=helm/v1-alpha
+
+	@echo "🚚 Moving templates folder from dist/chart/ to helm/..."
+	if [ -d "dist/chart/templates" ]; then \
+		rm -rf helm/templates; \
+		mv dist/chart/templates helm/; \
+	else \
+		echo "⚠️  No templates found in dist/chart/"; \
+	fi
+
+	@echo "✅ Helm chart templates moved to ./helm/templates/"
+
 
 .PHONY: helm-package
 helm-package: helm-sync ## Package Helm chart with current manifests
 	@echo "📦 Packaging Helm chart..."
 	helm package helm
 	@echo "✅ Helm chart packaged"
+
+.PHONY: helm-package-ci
+helm-package-ci: helm-sync ## Package Helm chart from helm directory
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	echo "📦 Packaging Helm chart version $$CHART_VERSION..."; \
+	helm package helm/
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
+	if [ ! -f "$$CHART_FILE" ]; then \
+		echo "❌ Error: Expected chart file not found: $$CHART_FILE"; \
+		echo "Available files:"; \
+		ls -la *.tgz 2>&1 || echo "No .tgz files found"; \
+		exit 1; \
+	fi; \
+	echo "chart_file=$$CHART_FILE" >> $(GITHUB_OUTPUT); \
+	echo "✅ Packaged: $$CHART_FILE ($$(du -h $$CHART_FILE | cut -f1))"
+
+.PHONY: build-charts-site
+build-charts-site: helm-package-ci ## Create charts directory for GitHub Pages and update index
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
+	CHARTS_DIR="charts-site"; \
+	echo "📦 Preparing charts site..."; \
+	mkdir -p "$$CHARTS_DIR"
+	@echo "📥 Fetching existing charts from GitHub Pages..."
+	@if curl -fsSL https://forkspacer.github.io/forkspacer/index.yaml -o /tmp/current-index.yaml 2>/dev/null; then \
+		echo "✅ Found existing Helm repository"; \
+	else \
+		echo "ℹ️  No existing charts found (first deployment)"; \
+	fi
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
+	CHARTS_DIR="charts-site"; \
+	if [ -f /tmp/current-index.yaml ]; then \
+		grep -oP 'https://forkspacer\.github\.io/forkspacer/forkspacer-[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?\.tgz' /tmp/current-index.yaml | sort -u | while read url; do \
+			filename=$$(basename "$$url"); \
+			if [ "$$filename" = "$$CHART_FILE" ]; then \
+				echo "  ⏭️  Skipping $$filename (will be replaced)"; \
+				continue; \
+			fi; \
+			echo "  📥 Downloading $$filename..."; \
+			if curl -fsSL "$$url" -o "$$CHARTS_DIR/$$filename"; then \
+				echo "  ✅ Downloaded $$filename"; \
+			else \
+				echo "  ⚠️  Failed to download $$filename"; \
+			fi; \
+		done; \
+	fi
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
+	CHARTS_DIR="charts-site"; \
+	echo "✅ Downloaded $$(ls $$CHARTS_DIR/forkspacer-*.tgz 2>/dev/null | wc -l) existing chart(s)"; \
+	cp "$$CHART_FILE" "$$CHARTS_DIR/"; \
+	echo "✅ Added new chart: $$CHART_FILE"
+	@CHARTS_DIR="charts-site"; \
+	echo "📄 Generating Helm repo index..."; \
+	helm repo index "$$CHARTS_DIR" --url https://forkspacer.github.io/forkspacer
+	@CHARTS_DIR="charts-site"; \
+	if [ -f ".github/templates/helm-page.html" ]; then \
+		cp .github/templates/helm-page.html "$$CHARTS_DIR/index.html"; \
+	else \
+		echo "⚠️  Warning: .github/templates/helm-page.html not found, skipping HTML generation"; \
+	fi
+	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	APP_VERSION=$$(grep '^appVersion:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHARTS_DIR="charts-site"; \
+	if [ -f "$$CHARTS_DIR/index.html" ]; then \
+		sed -i "s/{{VERSION_TAG}}/$$APP_VERSION/g" "$$CHARTS_DIR/index.html"; \
+		sed -i "s/{{VERSION_NUMBER}}/$$CHART_VERSION/g" "$$CHARTS_DIR/index.html"; \
+		echo "✅ Generated index.html from template"; \
+	fi
+	@CHARTS_DIR="charts-site"; \
+	echo "✅ Charts site ready with $$(ls $$CHARTS_DIR/forkspacer-*.tgz 2>/dev/null | wc -l) chart version(s)"; \
+	echo ""; \
+	echo "📦 Available versions:"; \
+	ls -lh $$CHARTS_DIR/forkspacer-*.tgz 2>/dev/null || echo "No charts found"
+
+.PHONY: helm-summary
+helm-summary: ## Generate GitHub Actions summary for Helm deployment
+	@SUMMARY_FILE=$${GITHUB_STEP_SUMMARY:-/tmp/summary.md}; \
+	CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	CHART_FILE="forkspacer-$${CHART_VERSION}.tgz"; \
+	echo "## 🎉 Helm Charts Deployed" >> $$SUMMARY_FILE; \
+	echo "- **Version**: $$CHART_VERSION" >> $$SUMMARY_FILE; \
+	echo "- **Chart**: $$CHART_FILE" >> $$SUMMARY_FILE; \
+	echo "- **Repository**: https://forkspacer.github.io/forkspacer" >> $$SUMMARY_FILE; \
+	echo "" >> $$SUMMARY_FILE; \
+	echo "### 📦 Installation" >> $$SUMMARY_FILE; \
+	echo '```bash' >> $$SUMMARY_FILE; \
+	echo "helm repo add forkspacer https://forkspacer.github.io/forkspacer" >> $$SUMMARY_FILE; \
+	echo "helm repo update" >> $$SUMMARY_FILE; \
+	echo "helm install forkspacer forkspacer/forkspacer" >> $$SUMMARY_FILE; \
+	echo '```' >> $$SUMMARY_FILE; \
+	echo "✅ Summary written to $$SUMMARY_FILE"
+
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
