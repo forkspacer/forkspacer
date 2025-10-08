@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"net/url"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	validationutils "k8s.io/apimachinery/pkg/util/validation"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/google/go-cmp/cmp"
 )
 
 // nolint:unused
@@ -101,7 +102,16 @@ func (v *ModuleCustomValidator) ValidateCreate(ctx context.Context, obj runtime.
 	}
 	modulelog.Info("Validation for Module upon creation", "name", module.GetName())
 
-	return nil, validateModule(ctx, v.Client, module)
+	allErrs := validateModule(ctx, v.Client, module)
+
+	if len(allErrs) > 0 {
+		return nil, apierrors.NewInvalid(
+			schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Module"},
+			module.Name, allErrs,
+		)
+	}
+
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Module.
@@ -109,13 +119,34 @@ func (v *ModuleCustomValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
 ) (admission.Warnings, error) {
-	module, ok := newObj.(*batchv1.Module)
+	oldModule, ok := oldObj.(*batchv1.Module)
+	if !ok {
+		return nil, fmt.Errorf("expected a Module object for the oldObj but got %T", oldObj)
+	}
+
+	newModule, ok := newObj.(*batchv1.Module)
 	if !ok {
 		return nil, fmt.Errorf("expected a Module object for the newObj but got %T", newObj)
 	}
-	modulelog.Info("Validation for Module upon update", "name", module.GetName())
+	modulelog.Info("Validation for Module upon update", "name", newModule.GetName())
 
-	return nil, validateModule(ctx, v.Client, module)
+	if allErrs := validateModuleImmutableUpdateFields(oldModule, newModule); len(allErrs) > 0 {
+		return nil, apierrors.NewInvalid(
+			schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Module"},
+			newModule.Name, allErrs,
+		)
+	}
+
+	allErrs := validateModule(ctx, v.Client, newModule)
+
+	if len(allErrs) > 0 {
+		return nil, apierrors.NewInvalid(
+			schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Module"},
+			newModule.Name, allErrs,
+		)
+	}
+
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Module.
@@ -131,35 +162,20 @@ func (v *ModuleCustomValidator) ValidateDelete(ctx context.Context, obj runtime.
 	return nil, nil
 }
 
-func validateModule(ctx context.Context, c client.Client, module *batchv1.Module) error {
+func validateModule(ctx context.Context, c client.Client, module *batchv1.Module) field.ErrorList {
 	var allErrs field.ErrorList
-	if err := validateModuleName(module); err != nil {
-		allErrs = append(allErrs, err)
-	}
+
 	if err := validateModuleSpec(ctx, c, module); err != nil {
 		allErrs = append(allErrs, err...)
 	}
-	if len(allErrs) == 0 {
-		return nil
-	}
 
-	return apierrors.NewInvalid(
-		schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Module"},
-		module.Name, allErrs,
-	)
-}
-
-func validateModuleName(module *batchv1.Module) *field.Error {
-	if len(module.Name) > validationutils.DNS1035LabelMaxLength-11 {
-		return field.Invalid(field.NewPath("metadata").Child("name"), module.Name, "must be no more than 52 characters")
-	}
-	return nil
+	return allErrs
 }
 
 func validateModuleSpec(ctx context.Context, c client.Client, module *batchv1.Module) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if err := validateModuleSource(module.Spec.Source, field.NewPath("spec").Child("source")); err != nil {
+	if err := validateModuleSource(ctx, module.Spec.Source, c, field.NewPath("spec").Child("source")); err != nil {
 		allErrs = append(allErrs, err)
 	}
 
@@ -170,8 +186,46 @@ func validateModuleSpec(ctx context.Context, c client.Client, module *batchv1.Mo
 	return allErrs
 }
 
-func validateModuleSource(moduleSource batchv1.ModuleSource, fldPath *field.Path) *field.Error {
+func validateModuleSource(
+	ctx context.Context,
+	moduleSource batchv1.ModuleSource,
+	c client.Client,
+	fldPath *field.Path,
+) *field.Error {
 	if moduleSource.Raw != nil {
+		return nil
+	} else if moduleSource.ConfigMap != nil {
+		configMap := &corev1.ConfigMap{}
+		err := c.Get(ctx, k8sTypes.NamespacedName{
+			Name:      moduleSource.ConfigMap.Name,
+			Namespace: moduleSource.ConfigMap.Namespace,
+		}, configMap)
+
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return field.Invalid(
+					field.NewPath("spec").Child("source").Child("configMap"),
+					moduleSource.ConfigMap,
+					fmt.Sprintf("secret %s/%s not found", moduleSource.ConfigMap.Namespace, moduleSource.ConfigMap.Name),
+				)
+			}
+			return field.InternalError(
+				field.NewPath("spec").Child("source").Child("configMap"),
+				fmt.Errorf("failed to validate ConfigMap reference: %v", err),
+			)
+		}
+
+		configMapData := configMap.Data["module.yaml"]
+		if len(configMapData) == 0 {
+			return field.Required(
+				field.NewPath("spec").Child("source").Child("configMap"),
+				fmt.Sprintf(
+					"ConfigMap %s/%s must contain a 'module.yaml' field",
+					moduleSource.ConfigMap.Namespace, moduleSource.ConfigMap.Name,
+				),
+			)
+		}
+
 		return nil
 	} else if moduleSource.HttpURL != nil {
 		moduleURLParsed, err := url.Parse(*moduleSource.HttpURL)
@@ -188,36 +242,29 @@ func validateModuleSource(moduleSource batchv1.ModuleSource, fldPath *field.Path
 				fmt.Sprintf("unsupported Http URL scheme, got '%s'", moduleURLParsed.Scheme),
 			)
 		}
-
 		return nil
 	} else if moduleSource.Github != nil {
-		return field.Invalid(fldPath.Child("github"), "", "'github' module source type is not yet supported")
+		return field.Invalid(
+			fldPath.Child("github"),
+			moduleSource.Github,
+			"'github' module source type is not yet supported",
+		)
+	} else if moduleSource.ExistingHelmRelease != nil {
+		return field.Invalid(
+			fldPath.Child("existingHelmRelease"),
+			moduleSource.ExistingHelmRelease,
+			"'existingHelmRelease' module source type is not yet supported",
+		)
 	} else {
-		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'httpURL', or 'github' must be specified")
+		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'configMap', or 'httpURL' must be specified")
 	}
 }
 
 func validateModuleWorkspace(ctx context.Context, c client.Client, module *batchv1.Module) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if module.Spec.Workspace.Name == "" {
-		allErrs = append(allErrs, field.Required(
-			field.NewPath("spec").Child("workspace").Child("name"),
-			"workspace name is required",
-		))
-		return allErrs
-	}
-
-	if module.Spec.Workspace.Namespace == "" {
-		allErrs = append(allErrs, field.Required(
-			field.NewPath("spec").Child("workspace").Child("namespace"),
-			"workspace namespace is required",
-		))
-		return allErrs
-	}
-
 	workspace := &batchv1.Workspace{}
-	err := c.Get(ctx, types.NamespacedName{
+	err := c.Get(ctx, k8sTypes.NamespacedName{
 		Name:      module.Spec.Workspace.Name,
 		Namespace: module.Spec.Workspace.Namespace,
 	}, workspace)
@@ -225,17 +272,54 @@ func validateModuleWorkspace(ctx context.Context, c client.Client, module *batch
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec").Child("workspace").Child("name"),
-				workspace.Name,
+				field.NewPath("spec").Child("workspace"),
+				module.Spec.Workspace,
 				fmt.Sprintf("workspace %s/%s not found", module.Spec.Workspace.Namespace, module.Spec.Workspace.Name),
 			))
 		} else {
 			allErrs = append(allErrs, field.InternalError(
-				field.NewPath("spec").Child("workspace").Child("name"),
+				field.NewPath("spec").Child("workspace"),
 				fmt.Errorf("failed to validate workspace reference: %v", err),
 			))
 		}
 		return allErrs
+	}
+
+	return allErrs
+}
+
+func validateModuleImmutableUpdateFields(oldModule, newModule *batchv1.Module) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if oldModule == nil || newModule == nil {
+		return allErrs
+	}
+
+	if !cmp.Equal(oldModule.Spec.Source, newModule.Spec.Source) {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("source"),
+				newModule.Spec.Source, "field is immutable",
+			),
+		)
+	}
+
+	if !cmp.Equal(oldModule.Spec.Workspace, newModule.Spec.Workspace) {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("workspace"),
+				newModule.Spec.Workspace, "field is immutable",
+			),
+		)
+	}
+
+	if !cmp.Equal(oldModule.Spec.Config, newModule.Spec.Config) {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("config"),
+				newModule.Spec.Config, "field is immutable",
+			),
+		)
 	}
 
 	return allErrs

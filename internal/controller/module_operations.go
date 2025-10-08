@@ -80,7 +80,10 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		annotations[types.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		installErr := iManager.Install(ctx, metaData)
@@ -157,7 +160,10 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		if err := iManager.Uninstall(ctx, metaData); err != nil {
@@ -215,7 +221,10 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		sleepErr := iManager.Sleep(ctx, metaData)
@@ -284,7 +293,10 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		resumeErr := iManager.Resume(ctx, metaData)

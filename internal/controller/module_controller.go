@@ -181,7 +181,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	log := logf.FromContext(ctx)
 
 	// Sleep
-	if module.Status.Phase == batchv1.ModulePhaseReady && utils.NotNilAndZero(module.Spec.Hibernated) {
+	if module.Status.Phase == batchv1.ModulePhaseReady && module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseSleeping, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -198,7 +198,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	}
 
 	// Resume
-	if module.Status.Phase == batchv1.ModulePhaseSleeped && utils.NotNilAndNot(module.Spec.Hibernated, true) {
+	if module.Status.Phase == batchv1.ModulePhaseSleeped && !module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseResuming, nil); err != nil {
 			return ctrl.Result{}, err
 		}

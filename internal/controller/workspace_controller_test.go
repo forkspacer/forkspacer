@@ -54,7 +54,7 @@ var _ = Describe("Workspace Controller", func() {
 					},
 					Spec: batchv1.WorkspaceSpec{
 						Type: batchv1.WorkspaceTypeKubernetes,
-						Connection: &batchv1.WorkspaceConnection{
+						Connection: batchv1.WorkspaceConnection{
 							Type: batchv1.WorkspaceConnectionTypeInCluster,
 						},
 					},

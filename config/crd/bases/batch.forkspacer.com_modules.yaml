@@ -63,18 +63,32 @@ spec:
                   configMap:
                     properties:
                       name:
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       namespace:
+                        default: default
+                        maxLength: 63
+                        minLength: 1
                         type: string
+                    required:
+                    - name
+                    - namespace
                     type: object
                   existingHelmRelease:
                     properties:
                       name:
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       namespace:
+                        default: default
+                        maxLength: 63
+                        minLength: 1
                         type: string
                     required:
                     - name
+                    - namespace
                     type: object
                   github:
                     type: object
@@ -87,14 +101,20 @@ spec:
               workspace:
                 properties:
                   name:
+                    maxLength: 253
+                    minLength: 1
                     type: string
                   namespace:
                     default: default
+                    maxLength: 63
+                    minLength: 1
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
             required:
+            - hibernated
             - source
             - workspace
             type: object
