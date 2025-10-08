@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 )
 
 func (r *ModuleReconciler) readModuleLocation(
@@ -84,7 +85,7 @@ func (r *ModuleReconciler) readModuleFromConfigMap(
 		return nil, fmt.Errorf("failed to fetch ConfigMap %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	data, ok := configMap.Data["module.yaml"]
+	data, ok := configMap.Data[kubernetesCons.ModuleConfigMapKeys.Source]
 	if !ok {
 		return nil, fmt.Errorf("key 'module.yaml' not found in ConfigMap %s/%s", ref.Namespace, ref.Name)
 	}

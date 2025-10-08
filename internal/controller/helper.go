@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
-	"github.com/forkspacer/forkspacer/pkg/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -56,7 +56,7 @@ func NewKubernetesConfig(
 				workspaceConn.SecretReference.Namespace, workspaceConn.SecretReference.Name, err)
 		}
 
-		clientConfig, _ := clientcmd.NewClientConfigFromBytes(secret.Data["kubeconfig"])
+		clientConfig, _ := clientcmd.NewClientConfigFromBytes(secret.Data[kubernetesCons.WorkspaceSecretKeys.KubeConfig])
 		config, err = clientConfig.ClientConfig()
 		if err != nil {
 			return nil, err
@@ -186,7 +186,7 @@ func ConvertRestConfigToAPIConfig(
 
 // IsHelmModule checks if a module is a Helm module by examining its resource annotation
 func IsHelmModule(module *batchv1.Module) bool {
-	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
 		return false
 	}
@@ -204,13 +204,13 @@ func IsHelmModule(module *batchv1.Module) bool {
 func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.HelmModule, error) {
 	log := logf.FromContext(ctx)
 
-	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
 		return resources.HelmModule{},
 			fmt.Errorf("module %s/%s is missing resource annotation", module.Namespace, module.Name)
 	}
 
-	managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
+	managerData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
 	metaData := make(managerBase.MetaData)
 	if ok && managerData != "" {
 		if err := metaData.Parse([]byte(managerData)); err != nil {
@@ -219,7 +219,7 @@ func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.Hel
 	}
 
 	configMap := make(map[string]any)
-	configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+	configMapData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig]
 	if ok {
 		if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
 			log.Error(err, "failed to unmarshal module config from annotation")

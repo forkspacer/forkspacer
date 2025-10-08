@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"plugin"
 
+	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
-	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
@@ -41,7 +41,7 @@ func NewModuleCustomManager(
 
 	pluginFile := metaData.DecodeToString(customMetaDataKeys.PluginFilePath)
 	if pluginFile == "" {
-		fileWritePath := types.BaseDataDir + "/custom-plugins/%x.so"
+		fileWritePath := fileCons.BaseDir + "/custom-plugins/%x.so"
 
 		if customModule.Spec.Repo.File != nil && *customModule.Spec.Repo.File != "" {
 			file, err := utils.WriteHTTPDataToFile(ctx,

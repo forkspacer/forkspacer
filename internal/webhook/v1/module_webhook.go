@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -215,7 +216,7 @@ func validateModuleSource(
 			)
 		}
 
-		configMapData := configMap.Data["module.yaml"]
+		configMapData := configMap.Data[kubernetesCons.ModuleConfigMapKeys.Source]
 		if len(configMapData) == 0 {
 			return field.Required(
 				field.NewPath("spec").Child("source").Child("configMap"),

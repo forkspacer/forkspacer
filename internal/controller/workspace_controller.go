@@ -36,7 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	"github.com/forkspacer/forkspacer/pkg/types"
+	cronCons "github.com/forkspacer/forkspacer/pkg/constants/cron"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
@@ -131,12 +131,12 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.sleepCronManager = &sleepCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.resumeCronManager = &resumeCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.sleepCronManager.cron.Start()
@@ -157,7 +157,7 @@ func (r *WorkspaceReconciler) addSleepCron(log logr.Logger, workspace *batchv1.W
 
 	if entryID, ok := r.sleepCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
 			if err != nil {
 				return err
 			}
@@ -226,7 +226,7 @@ func (r *WorkspaceReconciler) addResumeCron(log logr.Logger, workspace *batchv1.
 
 	if entryID, ok := r.resumeCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
 			if err != nil {
 				return err
 			}

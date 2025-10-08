@@ -21,7 +21,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/forkspacer/forkspacer/pkg/types"
+	cronCons "github.com/forkspacer/forkspacer/pkg/constants/cron"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -235,7 +236,7 @@ func validateWorkspaceSpec(ctx context.Context, c client.Client, workspace *batc
 }
 
 func validateWorkspaceScheduleFormat(schedule string, fldPath *field.Path) *field.Error {
-	parser := cron.NewParser(types.CronParserOptions)
+	parser := cron.NewParser(cronCons.CronParserOptions)
 
 	if _, err := parser.Parse(schedule); err != nil {
 		return field.Invalid(fldPath, schedule, err.Error())
@@ -334,7 +335,7 @@ func validateWorkspaceKubeconfigInSecret(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
-	kubeconfigData, exists := secret.Data["kubeconfig"]
+	kubeconfigData, exists := secret.Data[kubernetesCons.WorkspaceSecretKeys.KubeConfig]
 	if !exists {
 		allErrs = append(allErrs, field.Required(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
