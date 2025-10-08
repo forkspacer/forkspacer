@@ -55,6 +55,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
+//nolint:lll
 // +kubebuilder:webhook:path=/mutate-batch-forkspacer-com-v1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=batch.forkspacer.com,resources=workspaces,verbs=create;update,versions=v1,name=mworkspace-v1.kb.io,admissionReviewVersions=v1
 
 // WorkspaceCustomDefaulter struct is responsible for setting default values on the custom resource of the
@@ -106,6 +107,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	return nil
 }
 
+//nolint:lll
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
@@ -148,7 +150,10 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *WorkspaceCustomValidator) ValidateUpdate(
+	ctx context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	workspace, ok := newObj.(*batchv1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
@@ -248,7 +253,11 @@ func validateWorkspaceScheduleFormat(schedule string, fldPath *field.Path) *fiel
 	return nil
 }
 
-func validateWorkspaceFromReference(ctx context.Context, c client.Client, fromReference *batchv1.WorkspaceFromReference) *field.Error {
+func validateWorkspaceFromReference(
+	ctx context.Context,
+	c client.Client,
+	fromReference *batchv1.WorkspaceFromReference,
+) *field.Error {
 	if fromReference == nil {
 		return nil
 	}
@@ -284,7 +293,11 @@ func validateWorkspaceFromReference(ctx context.Context, c client.Client, fromRe
 	return nil
 }
 
-func validateWorkspaceSecretReference(ctx context.Context, c client.Client, connection *batchv1.WorkspaceConnection) field.ErrorList {
+func validateWorkspaceSecretReference(
+	ctx context.Context,
+	c client.Client,
+	connection *batchv1.WorkspaceConnection,
+) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if connection == nil {
@@ -345,7 +358,11 @@ func validateWorkspaceSecretReference(ctx context.Context, c client.Client, conn
 		return allErrs
 	}
 
-	if errs := validateWorkspaceKubeconfigInSecret(secret, connection.SecretReference.Name, connection.SecretReference.Namespace); errs != nil {
+	if errs := validateWorkspaceKubeconfigInSecret(
+		secret,
+		connection.SecretReference.Name,
+		connection.SecretReference.Namespace,
+	); errs != nil {
 		allErrs = append(allErrs, errs...)
 	}
 

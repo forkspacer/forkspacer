@@ -7,6 +7,7 @@ metadata:
 spec:
   type: kubernetes
   from:
+    migrateData: true
     name: default
     # namespace: default
   # connection:

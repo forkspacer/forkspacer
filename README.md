@@ -52,7 +52,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-ca
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 
 # Install Forkspacer using Helm
-kubectl apply -f https://raw.githubusercontent.com/forkspacer/forkspacer/tags/v0.1.3/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/forkspacer/forkspacer/$(curl -s https://api.github.com/repos/forkspacer/forkspacer/tags | grep -m 1 '"name"' | cut -d'"' -f4)/dist/install.yaml
 ```
 
 ### Basic Usage
