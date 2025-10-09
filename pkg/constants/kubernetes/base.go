@@ -19,7 +19,17 @@ var WorkspaceSecretKeys = struct {
 }
 
 var ModuleConfigMapKeys = struct {
-	Source string
+	Source,
+	CustomPlugin string
 }{
-	Source: "module.yaml",
+	Source:       "module.yaml",
+	CustomPlugin: "plugin",
+}
+
+var Helm = struct {
+	DefaultNamespace,
+	ValuesConfigMapKey string
+}{
+	DefaultNamespace:   "default",
+	ValuesConfigMapKey: "values",
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -465,7 +466,7 @@ func (service HelmService) MergeHelmValues(
 				)
 			}
 
-			if configMapValues := configMap.Data[resources.HelmValuesConfigMapDataKey]; configMapValues != "" {
+			if configMapValues := configMap.Data[kubernetesCons.Helm.ValuesConfigMapKey]; configMapValues != "" {
 				parsedConfigMapValues, err := chartutil.ReadValues([]byte(configMapValues))
 				if err != nil {
 					return nil, fmt.Errorf(

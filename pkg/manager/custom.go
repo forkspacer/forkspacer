@@ -6,6 +6,8 @@ import (
 	"plugin"
 
 	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/utils"
@@ -16,12 +18,6 @@ import (
 )
 
 var _ base.IManager = ModuleCustomManager{}
-
-var customMetaDataKeys = struct {
-	PluginFilePath string
-}{
-	PluginFilePath: "pluginFilePath",
-}
 
 type ModuleCustomManager struct {
 	customManager base.IManager
@@ -39,7 +35,7 @@ func NewModuleCustomManager(
 		return nil, err
 	}
 
-	pluginFile := metaData.DecodeToString(customMetaDataKeys.PluginFilePath)
+	pluginFile := metaData.DecodeToString(managerCons.CustomMetaDataKeys.PluginFilePath)
 	if pluginFile == "" {
 		fileWritePath := fileCons.BaseDir + "/custom-plugins/%x.so"
 
@@ -63,7 +59,7 @@ func NewModuleCustomManager(
 
 			file, err := utils.WriteConfigMapToFile(ctx,
 				controllerClient,
-				namespace, customModule.Spec.Repo.ConfigMap.Name, resources.CustomPluginConfigMapDataKey,
+				namespace, customModule.Spec.Repo.ConfigMap.Name, kubernetesCons.ModuleConfigMapKeys.CustomPlugin,
 				fileWritePath,
 				false, true,
 			)
@@ -80,7 +76,7 @@ func NewModuleCustomManager(
 			return nil, fmt.Errorf("custom module does not specify a plugin file or configmap source")
 		}
 
-		metaData[customMetaDataKeys.PluginFilePath] = pluginFile
+		metaData[managerCons.CustomMetaDataKeys.PluginFilePath] = pluginFile
 	}
 
 	customPlugin, err := plugin.Open(pluginFile)

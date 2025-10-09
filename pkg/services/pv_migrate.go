@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"os/exec"
 
+	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
-
-const PVMigrateCLIToolPath = "/usr/local/bin/pv-migrate"
 
 type PVMigrateService struct {
 	pvMigrateToolPath string
@@ -17,7 +16,7 @@ type PVMigrateService struct {
 
 func NewPVMigrateService(pvMigrateToolPath *string) *PVMigrateService {
 	if pvMigrateToolPath == nil {
-		pvMigrateToolPath = utils.ToPtr(PVMigrateCLIToolPath)
+		pvMigrateToolPath = utils.ToPtr(fileCons.PVMigrateCLIToolPath)
 	}
 
 	return &PVMigrateService{

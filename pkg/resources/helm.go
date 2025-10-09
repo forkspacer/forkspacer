@@ -7,8 +7,6 @@ import (
 
 var _ Resource = HelmModule{}
 
-const HelmValuesConfigMapDataKey = "values"
-
 type HelmValues struct {
 	File      *string             `yaml:"file"`
 	ConfigMap *ResourceIndetifier `yaml:"configMap"`

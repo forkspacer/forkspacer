@@ -36,6 +36,7 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
@@ -256,12 +257,12 @@ func (r *ModuleReconciler) newManager(
 	err := resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
 			var releaseName string
-			metaDataReleaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName]
+			metaDataReleaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName]
 			if ok {
 				releaseName = metaDataReleaseName.(string)
 			} else {
 				releaseName = newHelmReleaseNameFromModule(*module)
-				metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+				metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
 			}
 
 			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
