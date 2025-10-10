@@ -68,6 +68,22 @@ spec:
                 type: boolean
               source:
                 properties:
+                  configMap:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    type: object
+                  existingHelmRelease:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   github:
                     type: object
                   httpURL:
@@ -759,7 +775,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.3
+        image: ghcr.io/forkspacer/forkspacer:v0.1.5
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
