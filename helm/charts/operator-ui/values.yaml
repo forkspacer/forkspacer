@@ -1,0 +1,59 @@
+replicaCount: 1
+
+# Image configuration - will be overridden by global values from parent chart
+image:
+  repository: ""
+  pullPolicy: IfNotPresent
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  # nodePort: 30080  # Only used when type is NodePort
+
+# Ingress is handled by the parent chart with unified routing
+# The parent chart routes /* to this service
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  REACT_APP_API_BASE_URL: "http://forkspacer-api-server:8080"
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+podSecurityContext: {}
+
+securityContext: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

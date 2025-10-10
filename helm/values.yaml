@@ -1,10 +1,23 @@
-# [MANAGER]: Manager Deployment Configurations
+# [GLOBAL]: Global configuration (single source of truth for image versions)
+global:
+  operatorUI:
+    image:
+      repository: ghcr.io/forkspacer/operator-ui
+      tag: v0.1.1
+      pullPolicy: IfNotPresent
+  apiServer:
+    image:
+      repository: ghcr.io/forkspacer/api-server
+      tag: v1.0.0
+      pullPolicy: IfNotPresent
+
+# [MANAGER]: Manager Deployment Configurations (Required for generated templates)
 controllerManager:
   replicas: 1
   container:
     image:
       repository: ghcr.io/forkspacer/forkspacer
-      tag: v0.1.2
+      tag: v0.1.5
     imagePullPolicy: IfNotPresent
     args:
       - "--leader-elect"
@@ -40,6 +53,61 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: operator-controller-manager
+  serviceAccount:
+    annotations: {}
+
+# [OPERATOR-UI]: Frontend Configuration (Optional)
+# Enable this to get a web interface for managing workspaces and modules
+operatorUI:
+  enabled: false  # Set to true to enable web interface
+  replicas: 1
+  # Image configuration inherited from global.operatorUI.image
+  service:
+    # Service type options:
+    # - ClusterIP: Internal access only (use with ingress or port-forward)
+    # - NodePort: Direct access via node IP + port (good for local development)
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+    # nodePort: 30080  # Specify port when type=NodePort (optional)
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  env:
+    # API URL will be constructed dynamically based on deployment mode
+    REACT_APP_API_BASE_URL: ""
+  ingress:
+    enabled: false  # Disabled by default for local development
+    className: nginx
+    annotations: {}  # No rewrite needed - paths should be preserved
+    host: forkspacer.local  # Changed to local-friendly hostname
+    tls:
+      enabled: false  # Disabled for local development
+
+# [API-SERVER]: Backend API Configuration (Required - Always Enabled)
+apiServer:
+  enabled: true  # Cannot be disabled - API server is required
+  replicas: 1
+  # Image configuration inherited from global.apiServer.image
+  service:
+    type: ClusterIP  # Default: ClusterIP for production. Set to NodePort for local development
+    port: 8080
+    targetPort: 8421
+    # nodePort: 30421  # Only used when type is NodePort
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  env:
+    API_PORT: "8421"
+    DEV: "false"
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
@@ -85,3 +153,33 @@ certmanager:
 # [NETWORK POLICIES]: To enable NetworkPolicies set true
 networkPolicy:
   enable: false
+
+# [INGRESS]: Unified ingress configuration for UI and API
+ingress:
+  enabled: false  # Set to true to enable ingress
+  className: "nginx"
+  annotations:
+    # Production annotations (uncomment as needed):
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # 
+    # For AWS ALB:
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:...
+    #
+    # Rate limiting:
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+    # nginx.ingress.kubernetes.io/limit-connections: "10"
+  hosts:
+    - host: forkspacer.local  # Change to your domain (e.g., forkspacer.company.com)
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # Production TLS configuration:
+  # tls:
+  #   - secretName: forkspacer-tls
+  #     hosts:
+  #       - forkspacer.company.com

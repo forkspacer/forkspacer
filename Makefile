@@ -1,5 +1,5 @@
 # Version info
-VERSION ?= v0.1.3
+VERSION ?= v0.1.5
 GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -191,6 +191,24 @@ helm-sync: build-installer ## Generate Helm chart via Kubebuilder and move templ
 		echo "⚠️  No templates found in dist/chart/"; \
 	fi
 
+	@echo "📄 Copying NOTES.txt from .github/templates/ to helm/templates/..."
+	if [ -f ".github/templates/NOTES.txt" ]; then \
+		cp .github/templates/NOTES.txt helm/templates/NOTES.txt; \
+		echo "✅ NOTES.txt copied to helm/templates/"; \
+	else \
+		echo "⚠️  Warning: .github/templates/NOTES.txt not found, skipping NOTES.txt copy"; \
+	fi
+
+	@echo "📄 Copying custom templates from helm/custom-templates/..."
+	if [ -d "helm/custom-templates" ] && [ -n "$$(ls -A helm/custom-templates 2>/dev/null)" ]; then \
+		cp -r helm/custom-templates/* helm/templates/; \
+		echo "✅ Custom templates copied to helm/templates/"; \
+	else \
+		echo "⚠️  No custom templates found in helm/custom-templates/"; \
+	fi
+
+	@echo "🧹 Subchart templates preserved (static files)"
+
 	@echo "✅ Helm chart templates moved to ./helm/templates/"
 
 
@@ -294,6 +312,69 @@ helm-summary: ## Generate GitHub Actions summary for Helm deployment
 	echo '```' >> $$SUMMARY_FILE; \
 	echo "✅ Summary written to $$SUMMARY_FILE"
 
+##@ Version Management
+
+.PHONY: update-operator-ui-version
+update-operator-ui-version: ## Update operator-ui version. Usage: make update-operator-ui-version VERSION=v0.1.2
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Error: VERSION not specified. Usage: make update-operator-ui-version VERSION=v0.1.2"; \
+		exit 1; \
+	fi
+	@echo "🔄 Updating operator-ui to $(VERSION)..."
+	@sed -i.bak "/operatorUI:/,/pullPolicy:/ s/tag: v[0-9]\+\.[0-9]\+\.[0-9]\+/tag: $(VERSION)/" helm/values.yaml
+	@CHART_VERSION=$${VERSION#v}; \
+	sed -i.bak "/name: operator-ui/,/condition:/ s/version: \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/version: \"$$CHART_VERSION\"/" helm/Chart.yaml; \
+	sed -i.bak "s/^version: .*/version: $$CHART_VERSION/" helm/charts/operator-ui/Chart.yaml
+	@sed -i.bak "s/^appVersion: \"v[0-9]\+\.[0-9]\+\.[0-9]\+\"/appVersion: \"$(VERSION)\"/" helm/charts/operator-ui/Chart.yaml
+	@rm -f helm/values.yaml.bak helm/Chart.yaml.bak helm/charts/operator-ui/Chart.yaml.bak
+	@echo "✅ Updated operator-ui to $(VERSION)"
+
+.PHONY: update-api-server-version
+update-api-server-version: ## Update api-server version. Usage: make update-api-server-version VERSION=v0.1.1
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Error: VERSION not specified. Usage: make update-api-server-version VERSION=v0.1.1"; \
+		exit 1; \
+	fi
+	@echo "🔄 Updating api-server to $(VERSION)..."
+	@sed -i.bak "/apiServer:/,/pullPolicy:/ s/tag: [v]*[0-9]\+\.[0-9]\+\.[0-9]\+/tag: $(VERSION)/" helm/values.yaml
+	@CHART_VERSION=$${VERSION#v}; \
+	sed -i.bak "/name: api-server/,/condition:/ s/version: \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/version: \"$$CHART_VERSION\"/" helm/Chart.yaml; \
+	sed -i.bak "s/^version: .*/version: $$CHART_VERSION/" helm/charts/api-server/Chart.yaml
+	@sed -i.bak "s/^appVersion: \"[v]*[0-9]\+\.[0-9]\+\.[0-9]\+\"/appVersion: \"$(VERSION)\"/" helm/charts/api-server/Chart.yaml
+	@rm -f helm/values.yaml.bak helm/Chart.yaml.bak helm/charts/api-server/Chart.yaml.bak
+	@echo "✅ Updated api-server to $(VERSION)"
+
+.PHONY: update-forkspacer-version
+update-forkspacer-version: ## Update forkspacer operator version. Usage: make update-forkspacer-version VERSION=v0.1.6
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Error: VERSION not specified. Usage: make update-forkspacer-version VERSION=v0.1.6"; \
+		exit 1; \
+	fi
+	@echo "🔄 Updating forkspacer operator to $(VERSION)..."
+	@sed -i.bak "/controllerManager:/,/imagePullPolicy:/ s/tag: v[0-9]\+\.[0-9]\+\.[0-9]\+/tag: $(VERSION)/" helm/values.yaml
+	@CHART_VERSION=$${VERSION#v}; \
+	sed -i.bak "s/^version: .*/version: $$CHART_VERSION/" helm/Chart.yaml
+	@sed -i.bak "s/^appVersion: \"v[0-9]\+\.[0-9]\+\.[0-9]\+\"/appVersion: \"$(VERSION)\"/" helm/Chart.yaml
+	@sed -i.bak "s/^VERSION ?= .*/VERSION ?= $(VERSION)/" Makefile
+	@rm -f helm/values.yaml.bak helm/Chart.yaml.bak Makefile.bak
+	@echo "✅ Updated forkspacer operator to $(VERSION)"
+
+.PHONY: update-versions
+update-versions: ## Update multiple versions. Usage: make update-versions FORKSPACER_VERSION=v0.1.6 UI_VERSION=v0.1.2 API_VERSION=v0.1.1
+	@if [ -n "$(FORKSPACER_VERSION)" ]; then \
+		$(MAKE) update-forkspacer-version VERSION=$(FORKSPACER_VERSION); \
+	fi
+	@if [ -n "$(UI_VERSION)" ]; then \
+		$(MAKE) update-operator-ui-version VERSION=$(UI_VERSION); \
+	fi
+	@if [ -n "$(API_VERSION)" ]; then \
+		$(MAKE) update-api-server-version VERSION=$(API_VERSION); \
+	fi
+	@if [ -z "$(FORKSPACER_VERSION)" ] && [ -z "$(UI_VERSION)" ] && [ -z "$(API_VERSION)" ]; then \
+		echo "❌ Error: No versions specified. Usage: make update-versions FORKSPACER_VERSION=v0.1.6 UI_VERSION=v0.1.2 API_VERSION=v0.1.1"; \
+		exit 1; \
+	fi
+	@echo "🎉 Version update complete!"
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
