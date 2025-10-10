@@ -1,0 +1,16 @@
+apiVersion: v2
+name: operator-ui
+description: Web UI for Forkspacer operator
+type: application
+version: 0.1.1
+appVersion: "v0.1.1"
+keywords:
+  - ui
+  - frontend
+  - forkspacer
+home: https://github.com/forkspacer/operator-ui
+sources:
+  - https://github.com/forkspacer/operator-ui
+maintainers:
+  - name: Forkspacer Team
+    email: team@forkspacer.com

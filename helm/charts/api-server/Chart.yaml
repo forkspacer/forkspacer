@@ -1,0 +1,16 @@
+apiVersion: v2
+name: api-server
+description: REST API backend for Forkspacer operator
+type: application
+version: 1.0.0
+appVersion: "v1.0.0"
+keywords:
+  - api
+  - backend
+  - forkspacer
+home: https://github.com/forkspacer/api-server
+sources:
+  - https://github.com/forkspacer/api-server
+maintainers:
+  - name: Forkspacer Team
+    email: team@forkspacer.com
