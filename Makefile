@@ -4,7 +4,7 @@ GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Linker flags
-LDFLAGS := -ldflags "-X github.com/forkspacer/forkspacer/pkg/version.Version=$(VERSION) -X github.com/forkspacer/forkspacer/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/forkspacer/forkspacer/pkg/version.BuildDate=$(BUILD_DATE)"
+LDFLAGS := -ldflags "-X github.com/forkspacer/forkspacer/pkg/constants/version.Version=$(VERSION) -X github.com/forkspacer/forkspacer/pkg/constants/version.GitCommit=$(GIT_COMMIT) -X github.com/forkspacer/forkspacer/pkg/constants/version.BuildDate=$(BUILD_DATE)"
 
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/forkspacer/forkspacer:$(VERSION)

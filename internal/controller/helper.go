@@ -9,7 +9,7 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	"github.com/forkspacer/forkspacer/pkg/manager"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
@@ -229,7 +229,7 @@ func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.Hel
 	var helmModule resources.HelmModule
 	err := resources.HandleResource([]byte(resourceAnnotation), &configMap,
 		func(hm resources.HelmModule) error {
-			releaseName, ok := metaData[manager.HelmMetaDataKeys.ReleaseName].(string)
+			releaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
 			if !ok {
 				return fmt.Errorf("module release name not found in manager metadata or not a string")
 			}
