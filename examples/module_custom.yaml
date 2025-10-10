@@ -42,8 +42,10 @@ spec:
             max: 5
 
       spec:
-        repo:
-          file: "https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/plugin.so"
+        image: "ubuntu:latest"
+        permissions:
+          - "workspace"
+          - "controller"
 
   workspace:
     name: default

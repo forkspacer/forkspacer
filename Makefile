@@ -80,7 +80,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER_TEST ?= operator-test-e2e
+KIND_CLUSTER_TEST ?= forkspacer-test-e2e
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -145,7 +145,7 @@ build-plugin: ## Build a plugin using Docker. Usage: make build-plugin PLUGIN=te
 dev-host: manifests generate fmt vet ## Run a controller from your host.
 	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
 
-KIND_CLUSTER_DEV ?= operator-dev
+KIND_CLUSTER_DEV ?= forkspacer-dev
 
 .PHONY: dev-kind
 dev-kind: manifests generate fmt vet ## Run a controller in a kind cluster.

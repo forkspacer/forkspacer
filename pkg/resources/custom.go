@@ -1,50 +1,21 @@
 package resources
 
-import (
-	"errors"
-	"fmt"
-)
-
 var _ Resource = CustomModule{}
 
-type CustomModuleRepo struct {
-	File      *string             `yaml:"file,omitempty"`
-	ConfigMap *ResourceIndetifier `yaml:"configMap,omitempty"`
-}
+type CustomModulePermission string
 
-func (resource CustomModuleRepo) Validate() error {
-	numSet := 0
-	if resource.File != nil {
-		numSet++
-		if *resource.File == "" {
-			return errors.New("file path cannot be empty if specified")
-		}
-	}
-	if resource.ConfigMap != nil {
-		numSet++
-		if err := resource.ConfigMap.Validate(); err != nil {
-			return fmt.Errorf("invalid configMap configuration: %w", err)
-		}
-	}
-
-	if numSet == 0 {
-		return errors.New("either 'file' or 'configMap' must be specified for CustomModuleRepo")
-	}
-	if numSet > 1 {
-		return errors.New("cannot specify both 'file' and 'configMap' for CustomModuleRepo")
-	}
-
-	return nil
-}
+var (
+	CustomModulePermissionWorkspace  CustomModulePermission = "workspace"
+	CustomModulePermissionController CustomModulePermission = "controller"
+)
 
 type CustomModuleSpec struct {
-	Repo CustomModuleRepo `yaml:"repo"`
+	Image            string                   `yaml:"image"`
+	ImagePullSecrets []string                 `yaml:"imagePullSecrets"`
+	Permissions      []CustomModulePermission `yaml:"permissions"`
 }
 
 func (resource CustomModuleSpec) Validate() error {
-	if err := resource.Repo.Validate(); err != nil {
-		return err
-	}
 	return nil
 }
 
