@@ -81,7 +81,7 @@ helm install forkspacer forkspacer/forkspacer \
 
 ```bash
 # Port-forward to access the web UI locally
-kubectl port-forward svc/forkspacer-operator-ui 3000:80 -n forkspacer-system
+kubectl port-forward svc/operator-ui 3000:80 -n forkspacer-system
 
 # Access API
 kubectl port-forward svc/forkspacer-api-server 8421:8080 -n forkspacer-system

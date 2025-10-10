@@ -49,7 +49,7 @@ helm install forkspacer ./helm \
   --create-namespace
 
 # Access frontend
-kubectl port-forward svc/forkspacer-operator-ui 3000:80 -n forkspacer-system
+kubectl port-forward svc/operator-ui 3000:80 -n forkspacer-system
 
 # Access API
 kubectl port-forward svc/forkspacer-api-server 8421:8080 -n forkspacer-system
@@ -70,7 +70,7 @@ helm install forkspacer ./helm \
 
 # Get access URLs
 NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-UI_PORT=$(kubectl get svc forkspacer-operator-ui -n forkspacer-system -o jsonpath='{.spec.ports[0].nodePort}')
+UI_PORT=$(kubectl get svc operator-ui -n forkspacer-system -o jsonpath='{.spec.ports[0].nodePort}')
 echo "UI: http://$NODE_IP:$UI_PORT"
 ```
 
