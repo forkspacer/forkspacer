@@ -34,7 +34,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "operator-system"
+const namespace = "forkspacer-system"
 
 // serviceAccountName created for the project
 const serviceAccountName = "operator-controller-manager"

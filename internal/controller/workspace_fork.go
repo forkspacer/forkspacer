@@ -11,6 +11,7 @@ import (
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
+	"github.com/forkspacer/forkspacer/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -234,7 +235,7 @@ func (r *WorkspaceReconciler) migratePVCs(
 
 	// Create temporary kubeconfig files
 	destKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("dest-kubeconfig-%s-*.yaml", destWorkspace.Name))
-	destKubeconfigData, err := clientcmd.Write(*ConvertRestConfigToAPIConfig(destKubeConfig, "", "", ""))
+	destKubeconfigData, err := clientcmd.Write(*utils.ConvertRestConfigToAPIConfig(destKubeConfig, "", "", ""))
 	if err != nil {
 		return fmt.Errorf("failed to write destination kubeconfig: %w", err)
 	}
@@ -243,7 +244,7 @@ func (r *WorkspaceReconciler) migratePVCs(
 	}
 
 	sourceKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("source-kubeconfig-%s-*.yaml", sourceWorkspace.Name))
-	sourceKubeconfigData, err := clientcmd.Write(*ConvertRestConfigToAPIConfig(sourceKubeConfig, "", "", ""))
+	sourceKubeconfigData, err := clientcmd.Write(*utils.ConvertRestConfigToAPIConfig(sourceKubeConfig, "", "", ""))
 	if err != nil {
 		return fmt.Errorf("failed to write source kubeconfig: %w", err)
 	}

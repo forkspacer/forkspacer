@@ -13,7 +13,7 @@ This guide explains how to deploy Forkspacer using Helm in different environment
 ### 1. Basic Installation (Operator Only)
 ```bash
 helm install forkspacer ./helm \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 ```
 
@@ -21,7 +21,7 @@ helm install forkspacer ./helm \
 ```bash
 helm install forkspacer ./helm \
   --set operatorUI.enabled=true \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 ```
 
@@ -31,7 +31,7 @@ helm install forkspacer ./helm \
   --set operatorUI.enabled=true \
   --set operatorUI.ingress.enabled=true \
   --set operatorUI.ingress.host=forkspacer.yourdomain.com \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 ```
 
@@ -45,14 +45,14 @@ helm install forkspacer ./helm \
 ```bash
 helm install forkspacer ./helm \
   --set operatorUI.enabled=true \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 
 # Access frontend
-kubectl port-forward svc/forkspacer-operator-ui 3000:80 -n operator-system
+kubectl port-forward svc/forkspacer-operator-ui 3000:80 -n forkspacer-system
 
 # Access API
-kubectl port-forward svc/forkspacer-api-server 8421:8080 -n operator-system
+kubectl port-forward svc/forkspacer-api-server 8421:8080 -n forkspacer-system
 ```
 
 ### Mode 2: NodePort (Local Clusters)
@@ -65,12 +65,12 @@ helm install forkspacer ./helm \
   --set operatorUI.enabled=true \
   --set operator-ui.service.type=NodePort \
   --set api-server.service.type=NodePort \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 
 # Get access URLs
 NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-UI_PORT=$(kubectl get svc forkspacer-operator-ui -n operator-system -o jsonpath='{.spec.ports[0].nodePort}')
+UI_PORT=$(kubectl get svc forkspacer-operator-ui -n forkspacer-system -o jsonpath='{.spec.ports[0].nodePort}')
 echo "UI: http://$NODE_IP:$UI_PORT"
 ```
 
@@ -86,7 +86,7 @@ helm install forkspacer ./helm \
   --set operatorUI.enabled=true \
   --set ingress.enabled=true \
   --set ingress.hosts[0].host=forkspacer.yourdomain.com \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 ```
 
@@ -232,14 +232,14 @@ Remember:
 
 ```bash
 # Upgrade with new values
-helm upgrade forkspacer ./helm --set operatorUI.enabled=true -n operator-system
+helm upgrade forkspacer ./helm --set operatorUI.enabled=true -n forkspacer-system
 
 # Check upgrade status
-helm status forkspacer -n operator-system
+helm status forkspacer -n forkspacer-system
 ```
 
 ## Uninstalling
 
 ```bash
-helm uninstall forkspacer -n operator-system
+helm uninstall forkspacer -n forkspacer-system
 ```

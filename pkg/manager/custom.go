@@ -2,17 +2,19 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"plugin"
+	"slices"
 
-	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/utils"
-	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -20,7 +22,8 @@ import (
 var _ base.IManager = ModuleCustomManager{}
 
 type ModuleCustomManager struct {
-	customManager base.IManager
+	controllerClient client.Client
+	podResource      *corev1.Pod
 }
 
 func NewModuleCustomManager(
@@ -31,94 +34,132 @@ func NewModuleCustomManager(
 	config map[string]any,
 	metaData base.MetaData,
 ) (base.IManager, error) {
+	log := logf.FromContext(ctx)
+
 	if err := customModule.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate custom module: %w", err)
 	}
 
-	pluginFile := metaData.DecodeToString(managerCons.CustomMetaDataKeys.PluginFilePath)
-	if pluginFile == "" {
-		fileWritePath := fileCons.BaseDir + "/custom-plugins/%x.so"
-
-		if customModule.Spec.Repo.File != nil && *customModule.Spec.Repo.File != "" {
-			file, err := utils.WriteHTTPDataToFile(ctx,
-				*customModule.Spec.Repo.File,
-				fileWritePath,
-				false, true,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to write HTTP plugin file from %q: %w", *customModule.Spec.Repo.File, err)
-			}
-			_ = file.Close()
-
-			pluginFile = file.Name()
-		} else if customModule.Spec.Repo.ConfigMap != nil {
-			namespace := customModule.Spec.Repo.ConfigMap.Namespace
-			if namespace == "" {
-				namespace = "default"
-			}
-
-			file, err := utils.WriteConfigMapToFile(ctx,
-				controllerClient,
-				namespace, customModule.Spec.Repo.ConfigMap.Name, kubernetesCons.ModuleConfigMapKeys.CustomPlugin,
-				fileWritePath,
-				false, true,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to write ConfigMap plugin file from %s/%s: %w",
-					namespace, customModule.Spec.Repo.ConfigMap.Name, err,
-				)
-			}
-			_ = file.Close()
-
-			pluginFile = file.Name()
-		} else {
-			return nil, fmt.Errorf("custom module does not specify a plugin file or configmap source")
+	secretName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.SecretName)
+	if secretName == "" {
+		configJSON, err := json.Marshal(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal custom module configuration: %w", err)
 		}
 
-		metaData[managerCons.CustomMetaDataKeys.PluginFilePath] = pluginFile
+		data := map[string][]byte{
+			"config.json": configJSON,
+		}
+
+		for _, permission := range customModule.Spec.Permissions {
+			switch permission {
+			case resources.CustomModulePermissionWorkspace:
+				kubeconfig, err := clientcmd.Write(
+					*utils.ConvertRestConfigToAPIConfig(kubernetesConfig, "", "", ""),
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to write workspace kubeconfig: %w", err)
+				}
+
+				data["workspace_kubeconfig"] = kubeconfig
+			case resources.CustomModulePermissionController:
+				// No specific data needed for controller permission currently
+			default:
+				log.Error(
+					fmt.Errorf("unsupported custom module permission: %s", permission),
+					"encountered an unsupported permission during custom module secret generation",
+				)
+				return nil, err
+			}
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "custom-manager-",
+				Namespace:    kubernetesCons.OperatorNamespace,
+				Labels: map[string]string{
+					kubernetesCons.BaseLabelKey: "true",
+				},
+			},
+			Immutable: utils.ToPtr(false),
+			Data:      data,
+			Type:      corev1.SecretTypeOpaque, // or other types like 'kubernetes.io/dockerconfigjson'
+		}
+		if err := controllerClient.Create(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to create custom module secret: %w", err)
+		}
+
+		secretName = secret.Name
+		metaData[managerCons.CustomMetaDataKeys.SecretName] = secretName
 	}
 
-	customPlugin, err := plugin.Open(pluginFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open plugin file %q: %w", pluginFile, err)
+	imagePullSecrets := make([]corev1.LocalObjectReference, len(customModule.Spec.ImagePullSecrets))
+	for i, imagePullSecret := range customModule.Spec.ImagePullSecrets {
+		imagePullSecrets[i] = corev1.LocalObjectReference{
+			Name: imagePullSecret,
+		}
 	}
 
-	newManagerSymbol, err := customPlugin.Lookup("NewManager")
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup 'NewManager' symbol in plugin: %w", err)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "custom-manager-",
+			Namespace:    kubernetesCons.OperatorNamespace,
+			Labels: map[string]string{
+				kubernetesCons.BaseLabelKey: "true",
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy:    corev1.RestartPolicyNever,
+			ImagePullSecrets: imagePullSecrets,
+			Containers: []corev1.Container{
+				{
+					Name:  "worker",
+					Image: customModule.Spec.Image,
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "secret-volume",
+							MountPath: "/forkspacer",
+							ReadOnly:  false,
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "secret-volume",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: secretName,
+						},
+					},
+				},
+			},
+		},
 	}
 
-	newManagerFunc, ok := newManagerSymbol.(func(ctx context.Context, logger logr.Logger, kubernetesConfig *rest.Config, config map[string]any) (base.IManager, error)) //nolint:lll
-	if !ok {
-		return nil, fmt.Errorf(
-			"symbol 'NewManager' found in plugin is not of type 'NewCustomManagerT' (%T)",
-			newManagerSymbol,
-		)
+	if slices.Contains(customModule.Spec.Permissions, resources.CustomModulePermissionController) {
+		pod.Spec.ServiceAccountName = "forkspacer-controller-manager"
 	}
 
-	customManager, err := newManagerFunc(ctx, logf.FromContext(ctx), kubernetesConfig, config)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ModuleCustomManager{
-		customManager: customManager,
-	}, nil
+	return &ModuleCustomManager{controllerClient, pod}, nil
 }
 
 func (m ModuleCustomManager) Install(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Install(ctx, metaData)
+	// TODO: implement
+	return nil
 }
 
 func (m ModuleCustomManager) Uninstall(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Uninstall(ctx, metaData)
+	// TODO: implement
+	return nil
 }
 
 func (m ModuleCustomManager) Sleep(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Sleep(ctx, metaData)
+	// TODO: implement
+	return nil
 }
 
 func (m ModuleCustomManager) Resume(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Resume(ctx, metaData)
+	// TODO: implement
+	return nil
 }

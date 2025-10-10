@@ -11,7 +11,7 @@ var HelmMetaDataKeys = struct {
 }
 
 var CustomMetaDataKeys = struct {
-	PluginFilePath string
+	SecretName string
 }{
-	PluginFilePath: "pluginFilePath",
+	SecretName: "secretName",
 }
