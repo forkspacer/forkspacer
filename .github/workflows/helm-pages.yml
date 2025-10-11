@@ -2,10 +2,8 @@ name: Deploy Helm Charts to GitHub Pages
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [closed]
-    branches: [main]
-    paths: ['helm/**']
+  repository_dispatch:
+    types: [helm-pages-deploy]
 
 permissions:
   contents: read
@@ -15,14 +13,22 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # Only run if PR was merged and is a dependency update
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'dependency-update/'))
+    # Run on manual dispatch or dependency update automation
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Extract version information
+        id: versions
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          echo "component=${{ github.event.client_payload.component }}" >> $GITHUB_OUTPUT
+          echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          echo "chart_version=${{ github.event.client_payload.chart_version }}" >> $GITHUB_OUTPUT
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -38,6 +44,14 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v4.2.0
+
+      - name: Update dependency versions
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          make update-dependency \
+            COMPONENT="${{ steps.versions.outputs.component }}" \
+            VERSION="${{ steps.versions.outputs.version }}" \
+            CHART_VERSION="${{ steps.versions.outputs.chart_version }}"
 
       - name: Create charts directory
         run: |

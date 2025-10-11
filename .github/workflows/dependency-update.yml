@@ -71,3 +71,15 @@ jobs:
             COMPONENT="${{ steps.component.outputs.component }}" \
             VERSION="${{ steps.component.outputs.version }}" \
             CHART_VERSION="${{ steps.component.outputs.chart_version }}"
+
+      - name: Trigger Helm Pages Deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+          event-type: helm-pages-deploy
+          client-payload: |
+            {
+              "component": "${{ steps.component.outputs.component }}",
+              "version": "${{ steps.component.outputs.version }}",
+              "chart_version": "${{ steps.component.outputs.chart_version }}"
+            }
