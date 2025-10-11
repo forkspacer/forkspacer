@@ -29,12 +29,6 @@ jobs:
             VERSION="${{ steps.component.outputs.version }}" \
             CHART_VERSION="${{ steps.component.outputs.chart_version }}"
 
-      - name: Install Helm
-        uses: azure/setup-helm@v4.2.0
-
-      - name: Update Helm dependencies
-        run: make update-helm-dependencies
-
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
@@ -42,8 +36,8 @@ jobs:
           commit-message: |
             feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}
             
-            - Updated ${{ steps.component.outputs.component }} chart version to ${{ steps.component.outputs.chart_version }}
-            - Updated Helm dependencies
+            - Updated ${{ steps.component.outputs.component }} dependency version to ${{ steps.component.outputs.chart_version }} in Chart.yaml
+            - Updated global image tag to ${{ steps.component.outputs.version }} in values.yaml
             
           title: "feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}"
           body: |
@@ -56,7 +50,7 @@ jobs:
             - **New Version**: ${{ steps.component.outputs.version }}
             - **Chart Version**: ${{ steps.component.outputs.chart_version }}
             - **Updated**: helm/Chart.yaml dependency version
-            - **Updated**: helm/charts/ downloaded dependencies
+            - **Updated**: helm/values.yaml global image tag
             
             ### Triggered by
             - Repository: forkspacer/${{ steps.component.outputs.component }}
@@ -64,9 +58,9 @@ jobs:
             - Release workflow
             
             ### Verification
-            - [ ] Chart templates render correctly
-            - [ ] All tests pass
-            - [ ] Dependencies resolve properly
+            - [ ] Chart.yaml dependency version updated correctly
+            - [ ] values.yaml global image tag updated correctly
+            - [ ] No additional files committed (Chart.lock, .tgz files excluded)
             
           branch: dependency-update/${{ steps.component.outputs.component }}-${{ steps.component.outputs.chart_version }}
           delete-branch: true
