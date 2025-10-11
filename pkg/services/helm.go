@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -13,6 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -464,7 +466,7 @@ func (service HelmService) MergeHelmValues(
 				)
 			}
 
-			if configMapValues := configMap.Data[resources.HelmValuesConfigMapDataKey]; configMapValues != "" {
+			if configMapValues := configMap.Data[kubernetesCons.Helm.ValuesConfigMapKey]; configMapValues != "" {
 				parsedConfigMapValues, err := chartutil.ReadValues([]byte(configMapValues))
 				if err != nil {
 					return nil, fmt.Errorf(
@@ -508,4 +510,18 @@ func (service HelmService) GetSecretValue(ctx context.Context, namespace, name, 
 	}
 
 	return string(secretValue), nil
+}
+
+func (service HelmService) ListPVCs(
+	ctx context.Context,
+	releaseName, namespace string,
+) (*corev1.PersistentVolumeClaimList, error) {
+	pvcList, err := service.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/instance=" + releaseName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return pvcList, nil
 }

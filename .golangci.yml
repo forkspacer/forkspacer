@@ -1,6 +1,7 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  concurrency: 12
 linters:
   default: none
   enable:
@@ -8,7 +9,6 @@ linters:
     - dupl
     - errcheck
     - ginkgolinter
-    - goconst
     - gocyclo
     - govet
     - ineffassign
@@ -37,7 +37,6 @@ linters:
         path: api/*
       - linters:
           - dupl
-          - lll
         path: internal/*
       - linters:
           - unparam

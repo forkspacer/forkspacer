@@ -7,8 +7,6 @@ import (
 
 var _ Resource = HelmModule{}
 
-const HelmValuesConfigMapDataKey = "values"
-
 type HelmValues struct {
 	File      *string             `yaml:"file"`
 	ConfigMap *ResourceIndetifier `yaml:"configMap"`
@@ -46,10 +44,16 @@ type HelmModuleSpec struct {
 			} `yaml:"secret,omitempty"`
 		} `yaml:"valueFrom,omitempty"`
 	} `yaml:"outputs"`
-	Cleanup struct {
+	Cleanup *struct {
 		RemoveNamespace bool `yaml:"removeNamespace"`
 		RemovePVCs      bool `yaml:"removePVCs"`
-	} `yaml:"cleanup"`
+	} `yaml:"cleanup,omitempty"`
+	Migration *struct {
+		PVC *struct {
+			Enabled bool     `yaml:"enabled"`
+			Names   []string `yaml:"names"`
+		} `yaml:"pvc,omitempty"`
+	} `yaml:"migration,omitempty"`
 }
 
 func (resource HelmModuleSpec) Validate() error {

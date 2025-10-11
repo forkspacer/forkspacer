@@ -36,7 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	"github.com/forkspacer/forkspacer/pkg/types"
+	cronCons "github.com/forkspacer/forkspacer/pkg/constants/cron"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
@@ -119,7 +119,10 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 
 	default:
-		log.Error(errors.New("unknown workspace phase"), "encountered unknown workspace phase", "phase", workspace.Status.Phase)
+		log.Error(errors.New("unknown workspace phase"),
+			"encountered unknown workspace phase",
+			"phase", workspace.Status.Phase,
+		)
 		return ctrl.Result{}, nil
 	}
 }
@@ -128,12 +131,12 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.sleepCronManager = &sleepCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.resumeCronManager = &resumeCronManager{
 		idMapper: make(map[k8sTypes.UID]cron.EntryID),
-		cron:     cron.New(cron.WithParser(cron.NewParser(types.CronParserOptions))),
+		cron:     cron.New(cron.WithParser(cron.NewParser(cronCons.CronParserOptions))),
 	}
 
 	r.sleepCronManager.cron.Start()
@@ -154,7 +157,7 @@ func (r *WorkspaceReconciler) addSleepCron(log logr.Logger, workspace *batchv1.W
 
 	if entryID, ok := r.sleepCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(workspace.Spec.AutoHibernation.Schedule)
 			if err != nil {
 				return err
 			}
@@ -183,12 +186,12 @@ func (r *WorkspaceReconciler) addSleepCron(log logr.Logger, workspace *batchv1.W
 				return
 			}
 
-			if utils.NotNilAndNot(workspace.Spec.Hibernated, true) {
+			if !workspace.Spec.Hibernated {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 				defer cancel()
 
 				patch := client.MergeFrom(workspace.DeepCopy())
-				*workspace.Spec.Hibernated = true
+				workspace.Spec.Hibernated = true
 				if err := r.Patch(ctx, workspace, patch); err != nil {
 					log.Error(err, "failed to update workspace to hibernate state")
 				}
@@ -223,7 +226,7 @@ func (r *WorkspaceReconciler) addResumeCron(log logr.Logger, workspace *batchv1.
 
 	if entryID, ok := r.resumeCronManager.idMapper[workspace.UID]; ok {
 		if override {
-			newSchedule, err := cron.NewParser(types.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
+			newSchedule, err := cron.NewParser(cronCons.CronParserOptions).Parse(*workspace.Spec.AutoHibernation.WakeSchedule)
 			if err != nil {
 				return err
 			}
@@ -252,12 +255,12 @@ func (r *WorkspaceReconciler) addResumeCron(log logr.Logger, workspace *batchv1.
 				return
 			}
 
-			if utils.NotNilAndZero(workspace.Spec.Hibernated) {
+			if workspace.Spec.Hibernated {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 				defer cancel()
 
 				patch := client.MergeFrom(workspace.DeepCopy())
-				*workspace.Spec.Hibernated = false
+				workspace.Spec.Hibernated = false
 				if err := r.Patch(ctx, workspace, patch); err != nil {
 					log.Error(err, "failed to update workspace to hibernate state")
 				}
@@ -286,7 +289,10 @@ func (r *WorkspaceReconciler) removeResumeCron(workspaceUID k8sTypes.UID) {
 	delete(r.resumeCronManager.idMapper, workspaceUID)
 }
 
-func (r *WorkspaceReconciler) handleEmptyPhase(ctx context.Context, workspace *batchv1.Workspace) (ctrl.Result, error) { //nolint:unparam
+func (r *WorkspaceReconciler) handleEmptyPhase(
+	ctx context.Context,
+	workspace *batchv1.Workspace,
+) (ctrl.Result, error) { //nolint:unparam
 	log := logf.FromContext(ctx)
 
 	err := retry.RetryOnConflict(
@@ -309,7 +315,7 @@ func (r *WorkspaceReconciler) handleEmptyPhase(ctx context.Context, workspace *b
 	}
 
 	log.Info("New workspace detected, setting initial status")
-	if utils.NotNilAndZero(workspace.Spec.Hibernated) {
+	if workspace.Spec.Hibernated {
 		if err := r.setPhaseHibernated(ctx, workspace, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -326,14 +332,25 @@ func (r *WorkspaceReconciler) handleEmptyPhase(ctx context.Context, workspace *b
 					Name:      workspace.Spec.From.Name,
 				}, fromWorkspace,
 			); err != nil {
-				r.Recorder.Event(workspace, "Warning", "Start", fmt.Sprintf("failed to get source workspace %s/%s: %s", workspace.Spec.From.Namespace, workspace.Spec.From.Name, err.Error()))
+				r.Recorder.Event(workspace, "Warning", "Start",
+					fmt.Sprintf(
+						"failed to get source workspace %s/%s: %s",
+						workspace.Spec.From.Namespace, workspace.Spec.From.Name, err.Error(),
+					),
+				)
 
-				if err := r.setPhaseFailed(ctx, workspace, utils.ToPtr("Failed to start workspace. Check events for more information.")); err != nil {
+				if err := r.setPhaseFailed(
+					ctx, workspace,
+					utils.ToPtr("Failed to start workspace. Check events for more information."),
+				); err != nil {
 					log.Error(err, "failed to update workspace status to Failed after start workspace error")
 					return ctrl.Result{}, err
 				}
 
-				return ctrl.Result{}, fmt.Errorf("failed to get source workspace %s/%s: %w", workspace.Spec.From.Namespace, workspace.Spec.From.Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to get source workspace %s/%s: %w",
+					workspace.Spec.From.Namespace, workspace.Spec.From.Name, err,
+				)
 			}
 
 			if err := r.forkWorkspace(ctx, fromWorkspace, workspace); err != nil {
@@ -401,14 +418,20 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 	)
 }
 
-func (r *WorkspaceReconciler) handleHibernation(ctx context.Context, workspace *batchv1.Workspace) (ctrl.Result, error) { //nolint:unparam
+func (r *WorkspaceReconciler) handleHibernation(
+	ctx context.Context,
+	workspace *batchv1.Workspace,
+) (ctrl.Result, error) { //nolint:unparam
 	log := logf.FromContext(ctx)
 
 	// Sleep
-	if workspace.Status.HibernatedAt == nil && utils.NotNilAndZero(workspace.Spec.Hibernated) {
+	if workspace.Status.HibernatedAt == nil && workspace.Spec.Hibernated {
 		err := r.sleepModules(ctx, workspace)
 		if err != nil {
-			if err := r.setPhaseFailed(ctx, workspace, utils.ToPtr("Workspace hibernation failed. Check events for more information.")); err != nil {
+			if err := r.setPhaseFailed(
+				ctx, workspace,
+				utils.ToPtr("Workspace hibernation failed. Check events for more information."),
+			); err != nil {
 				log.Error(err, "failed to update workspace status to Failed after sleep modules error")
 				return ctrl.Result{}, err
 			}
@@ -423,10 +446,13 @@ func (r *WorkspaceReconciler) handleHibernation(ctx context.Context, workspace *
 	}
 
 	// Resume
-	if workspace.Status.HibernatedAt != nil && utils.NotNilAndNot(workspace.Spec.Hibernated, true) {
+	if workspace.Status.HibernatedAt != nil && !workspace.Spec.Hibernated {
 		err := r.resumeModules(ctx, workspace)
 		if err != nil {
-			if err := r.setPhaseFailed(ctx, workspace, utils.ToPtr("Workspace resume failed. Check events for more information.")); err != nil {
+			if err := r.setPhaseFailed(
+				ctx, workspace,
+				utils.ToPtr("Workspace resume failed. Check events for more information."),
+			); err != nil {
 				log.Error(err, "failed to update workspace status to Failed after resume modules error")
 				return ctrl.Result{}, err
 			}
@@ -443,20 +469,35 @@ func (r *WorkspaceReconciler) handleHibernation(ctx context.Context, workspace *
 	return ctrl.Result{}, nil
 }
 
-func (r *WorkspaceReconciler) handleAutoHibernation(ctx context.Context, workspace *batchv1.Workspace) ctrl.Result { //nolint:unparam
+func (r *WorkspaceReconciler) handleAutoHibernation(
+	ctx context.Context,
+	workspace *batchv1.Workspace,
+) ctrl.Result { //nolint:unparam
 	log := logf.FromContext(ctx)
 
 	if workspace.Spec.AutoHibernation != nil {
 		if workspace.Spec.AutoHibernation.Enabled {
 			if err := r.addSleepCron(log, workspace, true); err != nil {
-				log.Error(err, "Failed to add sleep cron schedule for workspace", "namespace", workspace.Namespace, "name", workspace.Name)
-				r.Recorder.Event(workspace, "Warning", "HibernationCron", fmt.Sprintf("Failed to add auto-hibernation schedule: %v", err))
+				log.Error(err,
+					"Failed to add sleep cron schedule for workspace",
+					"namespace", workspace.Namespace,
+					"name", workspace.Name,
+				)
+				r.Recorder.Event(workspace, "Warning", "HibernationCron",
+					fmt.Sprintf("Failed to add auto-hibernation schedule: %v", err),
+				)
 			}
 
 			if workspace.Spec.AutoHibernation.WakeSchedule != nil {
 				if err := r.addResumeCron(log, workspace, true); err != nil {
-					log.Error(err, "Failed to add resume cron schedule for workspace", "namespace", workspace.Namespace, "name", workspace.Name)
-					r.Recorder.Event(workspace, "Warning", "HibernationCron", fmt.Sprintf("Failed to add auto-resume schedule: %v", err))
+					log.Error(err,
+						"Failed to add resume cron schedule for workspace",
+						"namespace", workspace.Namespace,
+						"name", workspace.Name,
+					)
+					r.Recorder.Event(workspace, "Warning", "HibernationCron",
+						fmt.Sprintf("Failed to add auto-resume schedule: %v", err),
+					)
 				}
 			} else {
 				r.removeResumeCron(workspace.UID)
@@ -470,49 +511,63 @@ func (r *WorkspaceReconciler) handleAutoHibernation(ctx context.Context, workspa
 	return ctrl.Result{}
 }
 
-func (r *WorkspaceReconciler) forkWorkspace(
+// hibernateModuleAndWait hibernates a module and waits for it to reach the sleeped state
+func (r *WorkspaceReconciler) hibernateModuleAndWait(
 	ctx context.Context,
-	sourceWorkspace, destWorkspace *batchv1.Workspace,
+	module *batchv1.Module,
+	moduleType string,
 ) error {
 	log := logf.FromContext(ctx)
 
-	modules, err := r.getRelatedModules(ctx, sourceWorkspace.Namespace, sourceWorkspace.Name)
-	if err != nil {
-		return fmt.Errorf("failed to get related modules for source workspace %s/%s: %w", sourceWorkspace.Namespace, sourceWorkspace.Name, err)
+	if !module.Spec.Hibernated {
+		patch := client.MergeFrom(module.DeepCopy())
+		module.Spec.Hibernated = true
+		if err := r.Patch(ctx, module, patch); err != nil {
+			return err
+		}
 	}
 
-	const maxNameLength = 253
-
-	for _, module := range modules.Items {
-		timestamp := time.Now().Format("20060102150405")
-		moduleName := module.Name
-
-		// Truncate module name if it would exceed Kubernetes name length limit
-		if len(moduleName)+len(timestamp) > maxNameLength {
-			moduleName = moduleName[:maxNameLength-len(timestamp)]
+	for range 180 {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(module), module); err != nil {
+			log.Error(err,
+				fmt.Sprintf("failed to get %s module during hibernation wait", moduleType),
+				"module_name", module.Name,
+				"module_namespace", module.Namespace,
+			)
+			time.Sleep(time.Second * 3)
+			continue
 		}
 
-		err = r.Create(ctx,
-			&batchv1.Module{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace:   module.Namespace,
-					Name:        moduleName + "-" + timestamp,
-					Annotations: make(map[string]string),
-				},
-				Spec: batchv1.ModuleSpec{
-					Source: module.Spec.Source,
-					Workspace: batchv1.ModuleWorkspaceReference{
-						Name:      destWorkspace.Name,
-						Namespace: destWorkspace.Namespace,
-					},
-					Config:     module.Spec.Config,
-					Hibernated: module.Spec.Hibernated,
-				},
-			},
+		switch module.Status.Phase {
+		case batchv1.ModulePhaseSleeped:
+			return nil
+		case "", batchv1.ModulePhaseReady, batchv1.ModulePhaseInstalling,
+			batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
+			time.Sleep(time.Second * 3)
+			continue
+		case batchv1.ModulePhaseUninstalling:
+			return fmt.Errorf(
+				"%s module %s/%s is uninstalling, cannot proceed with hibernation",
+				moduleType, module.Namespace, module.Name,
+			)
+		case batchv1.ModulePhaseFailed:
+			return fmt.Errorf(
+				"%s module %s/%s has failed, cannot proceed with hibernation",
+				moduleType, module.Namespace, module.Name,
+			)
+		default:
+			return fmt.Errorf(
+				"unexpected %s module phase '%s' encountered during hibernation wait for module %s/%s",
+				moduleType, module.Status.Phase, module.Namespace, module.Name,
+			)
+		}
+	}
+
+	if module.Status.Phase != batchv1.ModulePhaseSleeped {
+		return fmt.Errorf(
+			"timed out waiting for %s module %s/%s to become hibernated, current phase: %s",
+			moduleType, module.Namespace, module.Name, module.Status.Phase,
 		)
-		if err != nil {
-			log.Error(err, "failed to create module from source workspace", "module_name", module.Name, "module_namespace", module.Namespace)
-		}
 	}
 
 	return nil
@@ -531,9 +586,9 @@ func (r *WorkspaceReconciler) sleepModules(ctx context.Context, workspace *batch
 	}
 
 	for _, module := range modules.Items {
-		if module.Spec.Hibernated == nil || utils.NotNilAndNot(module.Spec.Hibernated, true) {
+		if !module.Spec.Hibernated {
 			patch := client.MergeFrom(module.DeepCopy())
-			module.Spec.Hibernated = utils.ToPtr(true)
+			module.Spec.Hibernated = true
 			if err := r.Patch(ctx, &module, patch); err != nil {
 				log.Error(err, "failed to update module to hibernate state")
 			}
@@ -556,9 +611,9 @@ func (r *WorkspaceReconciler) resumeModules(ctx context.Context, workspace *batc
 	}
 
 	for _, module := range modules.Items {
-		if module.Spec.Hibernated == nil || utils.NotNilAndZero(module.Spec.Hibernated) {
+		if !module.Spec.Hibernated {
 			patch := client.MergeFrom(module.DeepCopy())
-			module.Spec.Hibernated = utils.ToPtr(false)
+			module.Spec.Hibernated = false
 			if err := r.Patch(ctx, &module, patch); err != nil {
 				log.Error(err, "failed to update module to hibernate state")
 			}
@@ -568,9 +623,18 @@ func (r *WorkspaceReconciler) resumeModules(ctx context.Context, workspace *batc
 	return nil
 }
 
-func (r *WorkspaceReconciler) getRelatedModules(ctx context.Context, workspaceNamespace, workspaceName string) (*batchv1.ModuleList, error) {
+func (r *WorkspaceReconciler) getRelatedModules(
+	ctx context.Context,
+	workspaceNamespace, workspaceName string,
+) (*batchv1.ModuleList, error) {
 	modules := &batchv1.ModuleList{}
-	if err := r.List(ctx, modules, client.MatchingFields{"spec.workspace.namespace": workspaceNamespace, "spec.workspace.name": workspaceName}); err != nil {
+	if err := r.List(
+		ctx, modules,
+		client.MatchingFields{
+			"spec.workspace.namespace": workspaceNamespace,
+			"spec.workspace.name":      workspaceName,
+		},
+	); err != nil {
 		return nil, fmt.Errorf("failed to get modules for workspace %s/%s: %w", workspaceNamespace, workspaceName, err)
 	}
 
@@ -619,7 +683,11 @@ func (r *WorkspaceReconciler) setPhaseFailed(ctx context.Context, workspace *bat
 	)
 }
 
-func (r *WorkspaceReconciler) setPhaseHibernated(ctx context.Context, workspace *batchv1.Workspace, message *string) error {
+func (r *WorkspaceReconciler) setPhaseHibernated(
+	ctx context.Context,
+	workspace *batchv1.Workspace,
+	message *string,
+) error {
 	return retry.RetryOnConflict(
 		retry.DefaultRetry,
 		func() error {

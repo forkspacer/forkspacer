@@ -1,4 +1,4 @@
-package types
+package cron
 
 import "github.com/robfig/cron/v3"
 

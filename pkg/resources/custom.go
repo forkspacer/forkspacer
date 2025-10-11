@@ -7,8 +7,6 @@ import (
 
 var _ Resource = CustomModule{}
 
-const CustomPluginConfigMapDataKey = "plugin"
-
 type CustomModuleRepo struct {
 	File      *string             `yaml:"file,omitempty"`
 	ConfigMap *ResourceIndetifier `yaml:"configMap,omitempty"`

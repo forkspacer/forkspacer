@@ -35,11 +35,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
-	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
@@ -93,7 +94,9 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	default:
 		log.Error(errors.New("unknown module phase"), "encountered unknown module phase", "phase", module.Status.Phase)
-		r.Recorder.Event(module, "Warning", "InternalError", fmt.Sprintf("encountered unknown module phase: %s", module.Status.Phase))
+		r.Recorder.Event(module, "Warning", "InternalError",
+			fmt.Sprintf("encountered unknown module phase: %s", module.Status.Phase),
+		)
 		return ctrl.Result{}, nil
 	}
 }
@@ -158,7 +161,10 @@ func (r *ModuleReconciler) handleEmptyPhase(ctx context.Context, module *batchv1
 		log.Error(err, "module installation failed")
 		r.Recorder.Event(module, "Warning", "InstallError", fmt.Sprintf("Module installation failed: %v", err))
 
-		if err := r.setPhase(ctx, module, batchv1.ModulePhaseFailed, utils.ToPtr("Module installation failed. Check events for more information.")); err != nil {
+		if err := r.setPhase(
+			ctx, module, batchv1.ModulePhaseFailed,
+			utils.ToPtr("Module installation failed. Check events for more information."),
+		); err != nil {
 			log.Error(err, "failed to update module status to Failed after installation error")
 			return ctrl.Result{}, err
 		}
@@ -176,7 +182,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	log := logf.FromContext(ctx)
 
 	// Sleep
-	if module.Status.Phase == batchv1.ModulePhaseReady && utils.NotNilAndZero(module.Spec.Hibernated) {
+	if module.Status.Phase == batchv1.ModulePhaseReady && module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseSleeping, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -193,7 +199,7 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	}
 
 	// Resume
-	if module.Status.Phase == batchv1.ModulePhaseSleeped && utils.NotNilAndNot(module.Spec.Hibernated, true) {
+	if module.Status.Phase == batchv1.ModulePhaseSleeped && !module.Spec.Hibernated {
 		if err := r.setPhase(ctx, module, batchv1.ModulePhaseResuming, nil); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -212,7 +218,12 @@ func (r *ModuleReconciler) handleHibernation(ctx context.Context, module *batchv
 	return ctrl.Result{RequeueAfter: time.Second * 2}, nil
 }
 
-func (r *ModuleReconciler) setPhase(ctx context.Context, module *batchv1.Module, phase batchv1.ModulePhaseType, message *string) error {
+func (r *ModuleReconciler) setPhase(
+	ctx context.Context,
+	module *batchv1.Module,
+	phase batchv1.ModulePhaseType,
+	message *string,
+) error {
 	return retry.RetryOnConflict(
 		retry.DefaultRetry,
 		func() error {
@@ -245,8 +256,14 @@ func (r *ModuleReconciler) newManager(
 
 	err := resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
-			releaseName := getHelmReleaseNameFromModule(*module)
-			metaData[manager.HelmMetaDataKeys.ReleaseName] = releaseName
+			var releaseName string
+			metaDataReleaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName]
+			if ok {
+				releaseName = metaDataReleaseName.(string)
+			} else {
+				releaseName = newHelmReleaseNameFromModule(*module)
+				metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
+			}
 
 			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
 			if err != nil {
@@ -280,7 +297,7 @@ func (r *ModuleReconciler) newManager(
 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, map[string]string{
-		types.ModuleAnnotationKeys.ManagerData: metaData.String(),
+		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
 	})
 	if err := r.Patch(ctx, module, patch); err != nil {
 		log.Error(err, "failed to patch module with manager data", "module", module.Name, "namespace", module.Namespace)
@@ -289,15 +306,24 @@ func (r *ModuleReconciler) newManager(
 	return iManager, err
 }
 
-func (r *ModuleReconciler) newHelmService(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*services.HelmService, error) {
+func (r *ModuleReconciler) newHelmService(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+) (*services.HelmService, error) {
 	return NewHelmService(ctx, workspaceConn, r.Client)
 }
 
-func (r *ModuleReconciler) newKubernetesConfig(ctx context.Context, workspaceConn *batchv1.WorkspaceConnection) (*rest.Config, error) {
+func (r *ModuleReconciler) newKubernetesConfig(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+) (*rest.Config, error) {
 	return NewKubernetesConfig(ctx, workspaceConn, r.Client)
 }
 
-func (r *ModuleReconciler) getWorkspace(ctx context.Context, workspaceRef *batchv1.ModuleWorkspaceReference) (*batchv1.Workspace, error) {
+func (r *ModuleReconciler) getWorkspace(
+	ctx context.Context,
+	workspaceRef *batchv1.ModuleWorkspaceReference,
+) (*batchv1.Workspace, error) {
 	workspace := &batchv1.Workspace{}
 	namespacedName := client.ObjectKey{
 		Name:      workspaceRef.Name,

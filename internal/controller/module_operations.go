@@ -26,8 +26,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
-	"github.com/forkspacer/forkspacer/pkg/types"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
@@ -66,7 +66,7 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 	}
 
 	annotations := map[string]string{
-		types.ModuleAnnotationKeys.Resource: string(moduleData),
+		kubernetesCons.ModuleAnnotationKeys.Resource: string(moduleData),
 	}
 
 	metaData := make(managerBase.MetaData)
@@ -77,19 +77,25 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 			return fmt.Errorf("failed to unmarshal module config: %v", err)
 		}
 
-		annotations[types.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
+		annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		installErr := iManager.Install(ctx, metaData)
 
 		patch := client.MergeFrom(module.DeepCopy())
-		annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		utils.UpdateMap(&module.Annotations, annotations)
 		if err = r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with install annotations", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with install annotations",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if installErr != nil {
@@ -129,13 +135,13 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	utils.InitMap(&module.Annotations)
 
-	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
 		return fmt.Errorf("resource definition not found in module annotations for %s/%s", module.Namespace, module.Name)
 	}
 	moduleData := []byte(resourceAnnotation)
 
-	managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
+	managerData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
 
 	metaData := make(managerBase.MetaData)
 	if ok && managerData != "" {
@@ -147,14 +153,17 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 	}
 
 	configMap := make(map[string]any)
-	configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+	configMapData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig]
 	if ok {
 		if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
 			log.Error(err, "failed to unmarshal module config from annotation")
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		if err := iManager.Uninstall(ctx, metaData); err != nil {
@@ -187,13 +196,13 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 
 	utils.InitMap(&module.Annotations)
 
-	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
 		return fmt.Errorf("resource definition not found in module annotations for %s/%s", module.Namespace, module.Name)
 	}
 	moduleData := []byte(resourceAnnotation)
 
-	managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
+	managerData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
 
 	metaData := make(managerBase.MetaData)
 	if ok && managerData != "" {
@@ -205,22 +214,28 @@ func (r *ModuleReconciler) sleepModule(ctx context.Context, module *batchv1.Modu
 	}
 
 	configMap := make(map[string]any)
-	configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+	configMapData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig]
 	if ok {
 		if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
 			log.Error(err, "failed to unmarshal module config from annotation")
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		sleepErr := iManager.Sleep(ctx, metaData)
 
 		patch := client.MergeFrom(module.DeepCopy())
-		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		if err := r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with meta data annotations after sleep", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with meta data annotations after sleep",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if sleepErr != nil {
@@ -253,13 +268,13 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 
 	utils.InitMap(&module.Annotations)
 
-	resourceAnnotation := module.Annotations[types.ModuleAnnotationKeys.Resource]
+	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
 		return fmt.Errorf("resource definition not found in module annotations for %s/%s", module.Namespace, module.Name)
 	}
 	moduleData := []byte(resourceAnnotation)
 
-	managerData, ok := module.Annotations[types.ModuleAnnotationKeys.ManagerData]
+	managerData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
 
 	metaData := make(managerBase.MetaData)
 	if ok && managerData != "" {
@@ -271,22 +286,28 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 	}
 
 	configMap := make(map[string]any)
-	configMapData, ok := module.Annotations[types.ModuleAnnotationKeys.BaseModuleConfig]
+	configMapData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig]
 	if ok {
 		if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
 			log.Error(err, "failed to unmarshal module config from annotation")
 		}
 	}
 
-	if iManager, err := r.newManager(ctx, module, workspace.Spec.Connection, moduleData, metaData, configMap); err != nil {
+	if iManager, err := r.newManager(ctx,
+		module, &workspace.Spec.Connection,
+		moduleData, metaData, configMap,
+	); err != nil {
 		return err
 	} else {
 		resumeErr := iManager.Resume(ctx, metaData)
 
 		patch := client.MergeFrom(module.DeepCopy())
-		module.Annotations[types.ModuleAnnotationKeys.ManagerData] = metaData.String()
+		module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
 		if err := r.Patch(ctx, module, patch); err != nil {
-			log.Error(err, "failed to patch module with meta data annotations after resume", "module", module.Name, "namespace", module.Namespace)
+			log.Error(err,
+				"failed to patch module with meta data annotations after resume",
+				"module", module.Name, "namespace", module.Namespace,
+			)
 		}
 
 		if resumeErr != nil {
@@ -325,16 +346,19 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 	// ... verify release exists ...
 
 	annotations := map[string]string{
-		types.ModuleAnnotationKeys.Resource: "adopted", // Marker that this is adopted
-		"forkspacer.com/adopted-release":    "true",
-		"forkspacer.com/release-name":       ref.Name,
-		"forkspacer.com/release-namespace":  ref.Namespace,
+		kubernetesCons.ModuleAnnotationKeys.Resource: "adopted", // Marker that this is adopted
+		"forkspacer.com/adopted-release":             "true",
+		"forkspacer.com/release-name":                ref.Name,
+		"forkspacer.com/release-namespace":           ref.Namespace,
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, annotations)
 	if err := r.Patch(ctx, module, patch); err != nil {
-		log.Error(err, "failed to patch module with adoption annotations", "module", module.Name, "namespace", module.Namespace)
+		log.Error(err,
+			"failed to patch module with adoption annotations",
+			"module", module.Name, "namespace", module.Namespace,
+		)
 		return err
 	}
 

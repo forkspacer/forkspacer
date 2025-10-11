@@ -30,9 +30,13 @@ import (
 	"sigs.k8s.io/yaml"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 )
 
-func (r *ModuleReconciler) readModuleLocation(ctx context.Context, moduleSource batchv1.ModuleSource) (io.Reader, error) {
+func (r *ModuleReconciler) readModuleLocation(
+	ctx context.Context,
+	moduleSource batchv1.ModuleSource,
+) (io.Reader, error) {
 	if moduleSource.Raw != nil {
 		return r.readModuleFromRaw(moduleSource.Raw)
 	}
@@ -55,7 +59,9 @@ func (r *ModuleReconciler) readModuleLocation(ctx context.Context, moduleSource 
 		return nil, nil
 	}
 
-	return nil, errors.New("exactly one of 'raw', 'configMap', 'httpURL', 'github', or 'existingHelmRelease' must be specified")
+	return nil, errors.New(
+		"exactly one of 'raw', 'configMap', 'httpURL', 'github', or 'existingHelmRelease' must be specified",
+	)
 }
 
 func (r *ModuleReconciler) readModuleFromRaw(raw *runtime.RawExtension) (io.Reader, error) {
@@ -67,7 +73,10 @@ func (r *ModuleReconciler) readModuleFromRaw(raw *runtime.RawExtension) (io.Read
 	return bytes.NewReader(yamlData), nil
 }
 
-func (r *ModuleReconciler) readModuleFromConfigMap(ctx context.Context, ref *batchv1.ModuleSourceConfigMapRef) (io.Reader, error) {
+func (r *ModuleReconciler) readModuleFromConfigMap(
+	ctx context.Context,
+	ref *batchv1.ModuleSourceConfigMapRef,
+) (io.Reader, error) {
 	configMap := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      ref.Name,
@@ -76,7 +85,7 @@ func (r *ModuleReconciler) readModuleFromConfigMap(ctx context.Context, ref *bat
 		return nil, fmt.Errorf("failed to fetch ConfigMap %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	data, ok := configMap.Data["module.yaml"]
+	data, ok := configMap.Data[kubernetesCons.ModuleConfigMapKeys.Source]
 	if !ok {
 		return nil, fmt.Errorf("key 'module.yaml' not found in ConfigMap %s/%s", ref.Namespace, ref.Name)
 	}
@@ -84,7 +93,10 @@ func (r *ModuleReconciler) readModuleFromConfigMap(ctx context.Context, ref *bat
 	return bytes.NewReader([]byte(data)), nil
 }
 
-func (r *ModuleReconciler) readModuleFromGithub(ctx context.Context, spec *batchv1.ModuleSourceGithubSpec) (io.Reader, error) {
+func (r *ModuleReconciler) readModuleFromGithub(
+	_ context.Context,
+	_ *batchv1.ModuleSourceGithubSpec,
+) (io.Reader, error) {
 	return nil, errors.New("'github' module location type is not yet supported")
 }
 

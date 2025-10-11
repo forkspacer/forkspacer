@@ -71,22 +71,30 @@ spec:
                     minLength: 0
                     type: string
                 required:
+                - enabled
                 - schedule
                 type: object
               connection:
+                default:
+                  type: in-cluster
                 properties:
                   secretReference:
                     properties:
                       name:
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       namespace:
                         default: default
+                        maxLength: 63
+                        minLength: 1
                         type: string
                     required:
                     - name
+                    - namespace
                     type: object
                   type:
-                    default: local
+                    default: in-cluster
                     enum:
                     - local
                     - in-cluster
@@ -96,14 +104,22 @@ spec:
                 - type
                 type: object
               from:
-                description: '*optional'
+                maxProperties: 3
                 properties:
+                  migrateData:
+                    default: false
+                    type: boolean
                   name:
+                    maxLength: 253
+                    minLength: 1
                     type: string
                   namespace:
                     default: default
+                    maxLength: 63
+                    minLength: 1
                     type: string
                 required:
+                - migrateData
                 - name
                 - namespace
                 type: object
@@ -115,6 +131,10 @@ spec:
                 enum:
                 - kubernetes
                 type: string
+            required:
+            - connection
+            - hibernated
+            - type
             type: object
           status:
             description: WorkspaceStatus defines the observed state of Workspace.
@@ -208,6 +228,7 @@ spec:
                 type: boolean
             required:
             - phase
+            - ready
             type: object
         required:
         - spec
