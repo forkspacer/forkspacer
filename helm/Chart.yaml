@@ -18,9 +18,5 @@ maintainers:
 dependencies:
   - name: api-server
     version: "1.0.0"
-    repository: "file://./charts/api-server"
+    repository: "https://forkspacer.github.io/api-server"
     condition: apiServer.enabled
-  - name: operator-ui
-    version: "0.1.1"
-    repository: "file://./charts/operator-ui"
-    condition: operatorUI.enabled

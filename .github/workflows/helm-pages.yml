@@ -2,6 +2,10 @@ name: Deploy Helm Charts to GitHub Pages
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [closed]
+    branches: [main]
+    paths: ['helm/**']
 
 permissions:
   contents: read
@@ -11,6 +15,8 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Only run if PR was merged and is a dependency update
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'dependency-update/'))
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
