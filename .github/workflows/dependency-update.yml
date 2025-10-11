@@ -1,0 +1,79 @@
+name: Update Dependencies
+
+on:
+  repository_dispatch:
+    types: [dependency-update]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract component info
+        id: component
+        run: |
+          echo "component=${{ github.event.client_payload.component }}" >> $GITHUB_OUTPUT
+          echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          echo "chart_version=${{ github.event.client_payload.chart_version }}" >> $GITHUB_OUTPUT
+
+      - name: Update Chart.yaml dependency
+        run: |
+          make update-dependency \
+            COMPONENT="${{ steps.component.outputs.component }}" \
+            VERSION="${{ steps.component.outputs.version }}" \
+            CHART_VERSION="${{ steps.component.outputs.chart_version }}"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - name: Update Helm dependencies
+        run: make update-helm-dependencies
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}
+            
+            - Updated ${{ steps.component.outputs.component }} chart version to ${{ steps.component.outputs.chart_version }}
+            - Updated Helm dependencies
+            
+          title: "feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}"
+          body: |
+            ## 🔄 Dependency Update
+            
+            This PR automatically updates the **${{ steps.component.outputs.component }}** dependency.
+            
+            ### Changes
+            - **Component**: ${{ steps.component.outputs.component }}
+            - **New Version**: ${{ steps.component.outputs.version }}
+            - **Chart Version**: ${{ steps.component.outputs.chart_version }}
+            - **Updated**: helm/Chart.yaml dependency version
+            - **Updated**: helm/charts/ downloaded dependencies
+            
+            ### Triggered by
+            - Repository: forkspacer/${{ steps.component.outputs.component }}
+            - Tag: ${{ steps.component.outputs.version }}
+            - Release workflow
+            
+            ### Verification
+            - [ ] Chart templates render correctly
+            - [ ] All tests pass
+            - [ ] Dependencies resolve properly
+            
+          branch: dependency-update/${{ steps.component.outputs.component }}-${{ steps.component.outputs.chart_version }}
+          delete-branch: true
+
+      - name: Summary
+        run: |
+          make dependency-summary \
+            COMPONENT="${{ steps.component.outputs.component }}" \
+            VERSION="${{ steps.component.outputs.version }}" \
+            CHART_VERSION="${{ steps.component.outputs.chart_version }}"
