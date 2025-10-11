@@ -38,7 +38,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
           commit-message: |
             feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}
             
