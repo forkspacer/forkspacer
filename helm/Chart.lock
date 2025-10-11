@@ -1,0 +1,6 @@
+dependencies:
+- name: api-server
+  repository: https://forkspacer.github.io/api-server
+  version: 1.0.0
+digest: sha256:354b723b3ae2f8bf0320ac37f5bf2a6ae6b691c8e39634aaba9ce19cdaf1865d
+generated: "2025-10-11T16:46:26.140316163Z"
