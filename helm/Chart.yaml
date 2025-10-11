@@ -17,6 +17,6 @@ maintainers:
     email: team@forkspacer.com
 dependencies:
   - name: api-server
-    version: "0.1.0"
+    version: "0.1.1"
     repository: "https://forkspacer.github.io/api-server"
     condition: apiServer.enabled
