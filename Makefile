@@ -4,7 +4,7 @@ GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Linker flags
-LDFLAGS := -ldflags "-X github.com/forkspacer/forkspacer/pkg/version.Version=$(VERSION) -X github.com/forkspacer/forkspacer/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/forkspacer/forkspacer/pkg/version.BuildDate=$(BUILD_DATE)"
+LDFLAGS := -ldflags "-X github.com/forkspacer/forkspacer/pkg/constants/version.Version=$(VERSION) -X github.com/forkspacer/forkspacer/pkg/constants/version.GitCommit=$(GIT_COMMIT) -X github.com/forkspacer/forkspacer/pkg/constants/version.BuildDate=$(BUILD_DATE)"
 
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/forkspacer/forkspacer:$(VERSION)
@@ -151,11 +151,11 @@ KIND_CLUSTER_DEV ?= operator-dev
 dev-kind: manifests generate fmt vet ## Run a controller in a kind cluster.
 	$(KIND) delete cluster -n $(KIND_CLUSTER_DEV)
 	$(KIND) create cluster -n $(KIND_CLUSTER_DEV)
+	$(MAKE) install docker-build
 	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 	$(KUBECTL) wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
 	$(KUBECTL) wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
 	$(KUBECTL) wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
-	$(MAKE) install docker-build
 	$(KIND) load docker-image $(IMG) -n $(KIND_CLUSTER_DEV)
 	$(MAKE) deploy
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
@@ -12,19 +14,7 @@ import (
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 )
 
-const defaultHelmNamespace = "default"
-
 var _ base.IManager = ModuleHelmManager{}
-
-var HelmMetaDataKeys = struct {
-	ReplicaHistory,
-	InstallOutputs,
-	ReleaseName string
-}{
-	ReplicaHistory: "replicaHistory",
-	InstallOutputs: "installOutputs",
-	ReleaseName:    "releaseName",
-}
 
 type ModuleHelmManager struct {
 	helmModule  *resources.HelmModule
@@ -54,7 +44,7 @@ func NewModuleHelmManager(
 func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) error {
 	namespace := m.helmModule.Spec.Namespace
 	if namespace == "" {
-		namespace = defaultHelmNamespace
+		namespace = kubernetesCons.Helm.DefaultNamespace
 	}
 
 	err := m.helmService.InstallFromRepository(
@@ -72,7 +62,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 	}
 
 	if outputs := m.extractOutputs(ctx); outputs.Len() > 0 {
-		metaData[HelmMetaDataKeys.InstallOutputs] = outputs
+		metaData[managerCons.HelmMetaDataKeys.InstallOutputs] = outputs
 	}
 
 	return err
@@ -88,7 +78,7 @@ func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.Order
 			if output.ValueFrom.Secret != nil && output.ValueFrom.Secret.Name != "" && output.ValueFrom.Secret.Key != "" {
 				namespace := output.ValueFrom.Secret.Namespace
 				if namespace != "" {
-					namespace = defaultHelmNamespace
+					namespace = kubernetesCons.Helm.DefaultNamespace
 				}
 
 				secretValue, err := m.helmService.GetSecretValue(ctx,
@@ -130,7 +120,7 @@ type ReplicaHistory struct {
 func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) error {
 	namespace := m.helmModule.Spec.Namespace
 	if namespace == "" {
-		namespace = defaultHelmNamespace
+		namespace = kubernetesCons.Helm.DefaultNamespace
 	}
 
 	var replicaHistory ReplicaHistory
@@ -138,7 +128,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 	oldReplicas, err := m.helmService.ScaleDeployments(ctx, m.releaseName, namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.Deployments = append(replicaHistory.Deployments, oldReplica)
-		metaData[HelmMetaDataKeys.ReplicaHistory] = replicaHistory
+		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
 	}
 	if err != nil {
 		return err
@@ -147,7 +137,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 	oldReplicas, err = m.helmService.ScaleReplicaSets(ctx, m.releaseName, namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.ReplicaSets = append(replicaHistory.ReplicaSets, oldReplica)
-		metaData[HelmMetaDataKeys.ReplicaHistory] = replicaHistory
+		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
 	}
 	if err != nil {
 		return err
@@ -156,7 +146,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 	oldReplicas, err = m.helmService.ScaleStatefulSets(ctx, m.releaseName, namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.StatefulSets = append(replicaHistory.StatefulSets, oldReplica)
-		metaData[HelmMetaDataKeys.ReplicaHistory] = replicaHistory
+		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
 	}
 	if err != nil {
 		return err
@@ -166,7 +156,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 }
 
 func (m ModuleHelmManager) Resume(ctx context.Context, metaData base.MetaData) error {
-	replicaHistory, ok := metaData[HelmMetaDataKeys.ReplicaHistory]
+	replicaHistory, ok := metaData[managerCons.HelmMetaDataKeys.ReplicaHistory]
 	if !ok {
 		return fmt.Errorf("replica history not found in metadata for module %s", m.helmModule.ObjectMeta.Name)
 	}
