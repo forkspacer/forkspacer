@@ -58,9 +58,9 @@ controllerManager:
 
 # [OPERATOR-UI]: Frontend Configuration (Optional)
 # Enable this to get a web interface for managing workspaces and modules
-operatorUI:
+operator-ui:
   enabled: false  # Set to true to enable web interface
-  replicas: 1
+  replicaCount: 1
   # Image configuration inherited from global.operatorUI.image
   service:
     # Service type options:
@@ -89,9 +89,9 @@ operatorUI:
       enabled: false  # Disabled for local development
 
 # [API-SERVER]: Backend API Configuration (Required - Always Enabled)
-apiServer:
+api-server:
   enabled: true  # Cannot be disabled - API server is required
-  replicas: 1
+  replicaCount: 1
   # Image configuration inherited from global.apiServer.image
   service:
     type: ClusterIP  # Default: ClusterIP for production. Set to NodePort for local development
