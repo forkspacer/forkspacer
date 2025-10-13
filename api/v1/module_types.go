@@ -58,6 +58,39 @@ type ModuleSourceExistingHelmReleaseRef struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
+
+	// ChartSource is optional. If provided, the release will be managed using this chart source
+	// for future operations (upgrades, reconfigurations). If not provided, the release will be
+	// adopted in snapshot mode using the current rendered manifests.
+	// +optional
+	ChartSource *ModuleSourceChartRef `json:"chartSource,omitempty"`
+}
+
+// ModuleSourceChartRef defines a reference to a Helm chart source
+type ModuleSourceChartRef struct {
+	// +optional
+	ConfigMap *ModuleSourceConfigMapRef `json:"configMap,omitempty"`
+
+	// +optional
+	HttpURL *string `json:"httpURL,omitempty"`
+
+	// Repository-based chart (e.g., from Helm repository)
+	// +optional
+	Repository *ModuleSourceChartRepository `json:"repository,omitempty"`
+}
+
+// ModuleSourceChartRepository defines a chart from a Helm repository
+type ModuleSourceChartRepository struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
+
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Chart string `json:"chart"`
+
+	// +optional
+	Version string `json:"version,omitempty"`
 }
 
 type ModuleSource struct {
