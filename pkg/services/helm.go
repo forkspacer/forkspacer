@@ -14,6 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/release"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -524,4 +525,36 @@ func (service HelmService) ListPVCs(
 	}
 
 	return pvcList, nil
+}
+
+// GetRelease retrieves information about an existing Helm release
+func (service HelmService) GetRelease(releaseName, namespace string) (*release.Release, error) {
+	actionClient := action.NewGet(service.actionConfig)
+
+	rel, err := actionClient.Run(releaseName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get release '%s' in namespace '%s': %w", releaseName, namespace, err)
+	}
+
+	return rel, nil
+}
+
+// GetReleaseManifest retrieves the rendered manifest of a Helm release
+func (service HelmService) GetReleaseManifest(releaseName, namespace string) (string, error) {
+	release, err := service.GetRelease(releaseName, namespace)
+	if err != nil {
+		return "", err
+	}
+
+	return release.Manifest, nil
+}
+
+// GetReleaseValues retrieves the values used for a Helm release
+func (service HelmService) GetReleaseValues(releaseName, namespace string) (map[string]interface{}, error) {
+	release, err := service.GetRelease(releaseName, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return release.Config, nil
 }

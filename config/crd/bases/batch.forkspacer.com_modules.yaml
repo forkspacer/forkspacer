@@ -77,6 +77,45 @@ spec:
                     type: object
                   existingHelmRelease:
                     properties:
+                      chartSource:
+                        description: |-
+                          ChartSource is optional. If provided, the release will be managed using this chart source
+                          for future operations (upgrades, reconfigurations). If not provided, the release will be
+                          adopted in snapshot mode using the current rendered manifests.
+                        properties:
+                          configMap:
+                            properties:
+                              name:
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                default: default
+                                maxLength: 63
+                                minLength: 1
+                                type: string
+                            required:
+                            - name
+                            - namespace
+                            type: object
+                          httpURL:
+                            type: string
+                          repository:
+                            description: Repository-based chart (e.g., from Helm repository)
+                            properties:
+                              chart:
+                                minLength: 1
+                                type: string
+                              url:
+                                minLength: 1
+                                type: string
+                              version:
+                                type: string
+                            required:
+                            - chart
+                            - url
+                            type: object
+                        type: object
                       name:
                         maxLength: 253
                         minLength: 1

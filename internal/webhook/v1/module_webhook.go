@@ -251,13 +251,10 @@ func validateModuleSource(
 			"'github' module source type is not yet supported",
 		)
 	} else if moduleSource.ExistingHelmRelease != nil {
-		return field.Invalid(
-			fldPath.Child("existingHelmRelease"),
-			moduleSource.ExistingHelmRelease,
-			"'existingHelmRelease' module source type is not yet supported",
-		)
+		// ExistingHelmRelease is now supported - no validation needed
+		return nil
 	} else {
-		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'configMap', or 'httpURL' must be specified")
+		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'configMap', 'httpURL', or 'existingHelmRelease' must be specified")
 	}
 }
 
