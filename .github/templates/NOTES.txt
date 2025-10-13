@@ -53,7 +53,7 @@
 kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-api-server 8080:8080
 echo "📚 API Docs: http://localhost:8080/api/v1/docs"
 To enable the web UI, upgrade with:
-helm upgrade {{ .Release.Name }} ./helm --set operatorUI.enabled=true
+helm upgrade {{ .Release.Name }} ./helm --set operator-ui.enabled=true
 {{- end }}
 ────────────────────────────────────────────────────────────────
 🛠️  DEPLOYMENT EXAMPLES for different environments:
@@ -61,7 +61,7 @@ helm upgrade {{ .Release.Name }} ./helm --set operatorUI.enabled=true
    helm upgrade {{ .Release.Name }} ./helm \
      --set operator-ui.enabled=true \
      --set ingress.enabled=true \
-     --set operatorUI.service.type=NodePort \
+     --set operator-ui.service.type=NodePort \
      --set api-server.service.type=NodePort
    # Production with custom domain and unified ingress
    helm upgrade {{ .Release.Name }} ./helm \
