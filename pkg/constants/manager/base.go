@@ -11,7 +11,13 @@ var HelmMetaDataKeys = struct {
 }
 
 var CustomMetaDataKeys = struct {
-	SecretName string
+	RunnerPodName,
+	RunnerPodUniqueLabel,
+	RunnerServiceName,
+	InnerMetaData string
 }{
-	SecretName: "secretName",
+	RunnerPodName:        "runnerPodName",
+	RunnerPodUniqueLabel: "runnerPodUniqueLabel",
+	RunnerServiceName:    "runnerServiceName",
+	InnerMetaData:        "innerMetaData",
 }
