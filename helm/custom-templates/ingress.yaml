@@ -29,7 +29,7 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          {{- if $.Values.apiServer.enabled }}
+          {{- if index $.Values "api-server" "enabled" }}
           # API Server route - must come before UI catch-all
           - path: /api
             pathType: Prefix
@@ -37,9 +37,9 @@ spec:
               service:
                 name: {{ $.Release.Name }}-api-server
                 port:
-                  number: {{ $.Values.apiServer.service.port }}
+                  number: {{ index $.Values "api-server" "service" "port" }}
           {{- end }}
-          {{- if $.Values.operatorUI.enabled }}
+          {{- if index $.Values "operator-ui" "enabled" }}
           # UI route - catch-all for root
           - path: /
             pathType: Prefix
@@ -47,7 +47,7 @@ spec:
               service:
                 name: {{ $.Release.Name }}-operator-ui
                 port:
-                  number: {{ $.Values.operatorUI.service.port }}
+                  number: {{ index $.Values "operator-ui" "service" "port" }}
           {{- end }}
     {{- end }}
 {{- end }}

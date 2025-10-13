@@ -80,13 +80,6 @@ operator-ui:
   env:
     # API URL will be constructed dynamically based on deployment mode
     REACT_APP_API_BASE_URL: ""
-  ingress:
-    enabled: false  # Disabled by default for local development
-    className: nginx
-    annotations: {}  # No rewrite needed - paths should be preserved
-    host: forkspacer.local  # Changed to local-friendly hostname
-    tls:
-      enabled: false  # Disabled for local development
 
 # [API-SERVER]: Backend API Configuration (Required - Always Enabled)
 api-server:
