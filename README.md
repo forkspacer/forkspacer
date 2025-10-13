@@ -71,8 +71,8 @@ helm install forkspacer forkspacer/forkspacer \
 
 # Install with web UI and API server enabled
 helm install forkspacer forkspacer/forkspacer \
-  --set operatorUI.enabled=true \
-  --set apiServer.enabled=true \
+  --set operator-ui.enabled=true \
+  --set api-server.enabled=true \
   --namespace forkspacer-system \
   --create-namespace
 ```
@@ -148,7 +148,7 @@ This ensures all component versions stay in sync across the Helm chart.
    # Update all components to latest versions
    make update-versions FORKSPACER_VERSION=v0.1.6 UI_VERSION=v0.1.2 API_VERSION=v0.1.1
    ```
-3. **Test locally**: `helm template ./helm --set operatorUI.enabled=true`
+3. **Test locally**: `helm template ./helm --set operator-ui.enabled=true`
 4. **Deploy updated chart**: `helm upgrade forkspacer ./helm`
 
 ### Basic Usage

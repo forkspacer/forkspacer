@@ -1,0 +1,85 @@
+name: Update Dependencies
+
+on:
+  repository_dispatch:
+    types: [dependency-update]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract component info
+        id: component
+        run: |
+          echo "component=${{ github.event.client_payload.component }}" >> $GITHUB_OUTPUT
+          echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
+          echo "chart_version=${{ github.event.client_payload.chart_version }}" >> $GITHUB_OUTPUT
+
+      - name: Update Chart.yaml dependency
+        run: |
+          make update-dependency \
+            COMPONENT="${{ steps.component.outputs.component }}" \
+            VERSION="${{ steps.component.outputs.version }}" \
+            CHART_VERSION="${{ steps.component.outputs.chart_version }}"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+          commit-message: |
+            feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}
+            
+            - Updated ${{ steps.component.outputs.component }} dependency version to ${{ steps.component.outputs.chart_version }} in Chart.yaml
+            - Updated global image tag to ${{ steps.component.outputs.version }} in values.yaml
+            
+          title: "feat: update ${{ steps.component.outputs.component }} to ${{ steps.component.outputs.version }}"
+          body: |
+            ## 🔄 Dependency Update
+            
+            This PR automatically updates the **${{ steps.component.outputs.component }}** dependency.
+            
+            ### Changes
+            - **Component**: ${{ steps.component.outputs.component }}
+            - **New Version**: ${{ steps.component.outputs.version }}
+            - **Chart Version**: ${{ steps.component.outputs.chart_version }}
+            - **Updated**: helm/Chart.yaml dependency version
+            - **Updated**: helm/values.yaml global image tag
+            
+            ### Triggered by
+            - Repository: forkspacer/${{ steps.component.outputs.component }}
+            - Tag: ${{ steps.component.outputs.version }}
+            - Release workflow
+            
+            ### Verification
+            - [ ] Chart.yaml dependency version updated correctly
+            - [ ] values.yaml global image tag updated correctly
+            - [ ] No additional files committed (Chart.lock, .tgz files excluded)
+            
+          branch: dependency-update/${{ steps.component.outputs.component }}-${{ steps.component.outputs.chart_version }}
+          delete-branch: true
+
+      - name: Summary
+        run: |
+          make dependency-summary \
+            COMPONENT="${{ steps.component.outputs.component }}" \
+            VERSION="${{ steps.component.outputs.version }}" \
+            CHART_VERSION="${{ steps.component.outputs.chart_version }}"
+
+      - name: Trigger Helm Pages Deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+          event-type: helm-pages-deploy
+          client-payload: |
+            {
+              "component": "${{ steps.component.outputs.component }}",
+              "version": "${{ steps.component.outputs.version }}",
+              "chart_version": "${{ steps.component.outputs.chart_version }}"
+            }

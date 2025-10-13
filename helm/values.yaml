@@ -8,7 +8,7 @@ global:
   apiServer:
     image:
       repository: ghcr.io/forkspacer/api-server
-      tag: v1.0.0
+      tag: v0.1.1
       pullPolicy: IfNotPresent
 
 # [MANAGER]: Manager Deployment Configurations (Required for generated templates)
@@ -58,9 +58,9 @@ controllerManager:
 
 # [OPERATOR-UI]: Frontend Configuration (Optional)
 # Enable this to get a web interface for managing workspaces and modules
-operatorUI:
+operator-ui:
   enabled: false  # Set to true to enable web interface
-  replicas: 1
+  replicaCount: 1
   # Image configuration inherited from global.operatorUI.image
   service:
     # Service type options:
@@ -80,18 +80,11 @@ operatorUI:
   env:
     # API URL will be constructed dynamically based on deployment mode
     REACT_APP_API_BASE_URL: ""
-  ingress:
-    enabled: false  # Disabled by default for local development
-    className: nginx
-    annotations: {}  # No rewrite needed - paths should be preserved
-    host: forkspacer.local  # Changed to local-friendly hostname
-    tls:
-      enabled: false  # Disabled for local development
 
 # [API-SERVER]: Backend API Configuration (Required - Always Enabled)
-apiServer:
+api-server:
   enabled: true  # Cannot be disabled - API server is required
-  replicas: 1
+  replicaCount: 1
   # Image configuration inherited from global.apiServer.image
   service:
     type: ClusterIP  # Default: ClusterIP for production. Set to NodePort for local development
