@@ -1,5 +1,5 @@
 # Version info
-VERSION ?= v0.1.5
+VERSION ?= v0.1.7
 GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -406,7 +406,11 @@ dependency-summary: ## Generate GitHub Actions summary for dependency update. Us
 		exit 1; \
 	fi
 	@SUMMARY_FILE=$${GITHUB_STEP_SUMMARY:-/tmp/summary.md}; \
-	echo "## 🎉 Dependency Update Complete" >> $$SUMMARY_FILE; \
+	if [ "$(COMPONENT)" = "forkspacer" ]; then \
+		echo "## 🎉 Main Chart Version Update Complete" >> $$SUMMARY_FILE; \
+	else \
+		echo "## 🎉 Dependency Update Complete" >> $$SUMMARY_FILE; \
+	fi; \
 	echo "- **Component**: $(COMPONENT)" >> $$SUMMARY_FILE; \
 	echo "- **Version**: $(VERSION)" >> $$SUMMARY_FILE; \
 	echo "- **Chart Version**: $(CHART_VERSION)" >> $$SUMMARY_FILE; \
