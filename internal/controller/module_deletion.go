@@ -39,11 +39,11 @@ func (r *ModuleReconciler) handleDeletion(ctx context.Context, module *batchv1.M
 		return ctrl.Result{RequeueAfter: time.Second * 2}, nil
 	}
 
+	modulePhase := module.Status.Phase
 	if err := r.setPhase(ctx, module, batchv1.ModulePhaseUninstalling, nil); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	modulePhase := module.Status.Phase
 	if err := r.uninstallModule(ctx, module); err != nil {
 		log.Error(err, "module uninstallation failed")
 		if modulePhase != batchv1.ModulePhaseFailed {

@@ -123,24 +123,6 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
-.PHONY: build-plugin
-build-plugin: ## Build a plugin using Docker. Usage: make build-plugin PLUGIN=test
-	@if [ -z "$(PLUGIN)" ]; then \
-		echo "Error: PLUGIN variable not set. Usage: make build-plugin PLUGIN=<plugin_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f "plugins/$(PLUGIN)/main.go" ]; then \
-		echo "Error: Plugin source file plugins/$(PLUGIN)/main.go not found"; \
-		exit 1; \
-	fi
-	@echo "Building plugin '$(PLUGIN)' in Docker container..."
-	$(CONTAINER_TOOL) build -f plugins/Dockerfile --build-arg PLUGIN=$(PLUGIN) -t plugin-builder-$(PLUGIN) .
-	@container_id=$$($(CONTAINER_TOOL) create plugin-builder-$(PLUGIN)); \
-	$(CONTAINER_TOOL) cp "$$container_id:/output/plugin.so" plugins/$(PLUGIN)/plugin.so; \
-	$(CONTAINER_TOOL) rm "$$container_id"
-	@echo "Plugin built successfully: plugins/$(PLUGIN)/plugin.so"
-	@echo "Plugin size: $$(du -h plugins/$(PLUGIN)/plugin.so | cut -f1)"
-
 .PHONY: dev-host
 dev-host: manifests generate fmt vet ## Run a controller from your host.
 	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
