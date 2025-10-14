@@ -1,5 +1,5 @@
 # Version info
-VERSION ?= v0.1.7
+VERSION ?= v0.1.8
 GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -80,7 +80,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER_TEST ?= operator-test-e2e
+KIND_CLUSTER_TEST ?= forkspacer-test-e2e
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -123,29 +123,11 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
-.PHONY: build-plugin
-build-plugin: ## Build a plugin using Docker. Usage: make build-plugin PLUGIN=test
-	@if [ -z "$(PLUGIN)" ]; then \
-		echo "Error: PLUGIN variable not set. Usage: make build-plugin PLUGIN=<plugin_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f "plugins/$(PLUGIN)/main.go" ]; then \
-		echo "Error: Plugin source file plugins/$(PLUGIN)/main.go not found"; \
-		exit 1; \
-	fi
-	@echo "Building plugin '$(PLUGIN)' in Docker container..."
-	$(CONTAINER_TOOL) build -f plugins/Dockerfile --build-arg PLUGIN=$(PLUGIN) -t plugin-builder-$(PLUGIN) .
-	@container_id=$$($(CONTAINER_TOOL) create plugin-builder-$(PLUGIN)); \
-	$(CONTAINER_TOOL) cp "$$container_id:/output/plugin.so" plugins/$(PLUGIN)/plugin.so; \
-	$(CONTAINER_TOOL) rm "$$container_id"
-	@echo "Plugin built successfully: plugins/$(PLUGIN)/plugin.so"
-	@echo "Plugin size: $$(du -h plugins/$(PLUGIN)/plugin.so | cut -f1)"
-
 .PHONY: dev-host
 dev-host: manifests generate fmt vet ## Run a controller from your host.
 	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
 
-KIND_CLUSTER_DEV ?= operator-dev
+KIND_CLUSTER_DEV ?= forkspacer-dev
 
 .PHONY: dev-kind
 dev-kind: manifests generate fmt vet ## Run a controller in a kind cluster.

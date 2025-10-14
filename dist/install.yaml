@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
     control-plane: controller-manager
-  name: operator-system
+  name: forkspacer-system
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -469,8 +469,8 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-controller-manager
-  namespace: operator-system
+  name: forkspacer-controller-manager
+  namespace: forkspacer-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -478,8 +478,8 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-leader-election-role
-  namespace: operator-system
+  name: forkspacer-leader-election-role
+  namespace: forkspacer-system
 rules:
 - apiGroups:
   - ""
@@ -516,7 +516,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-manager-role
+  name: forkspacer-manager-role
 rules:
 - apiGroups:
   - ""
@@ -535,7 +535,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-metrics-auth-role
+  name: forkspacer-metrics-auth-role
 rules:
 - apiGroups:
   - authentication.k8s.io
@@ -553,7 +553,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-metrics-reader
+  name: forkspacer-metrics-reader
 rules:
 - nonResourceURLs:
   - /metrics
@@ -566,7 +566,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-module-admin-role
+  name: forkspacer-module-admin-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -587,7 +587,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-module-editor-role
+  name: forkspacer-module-editor-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -614,7 +614,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-module-viewer-role
+  name: forkspacer-module-viewer-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -637,7 +637,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-workspace-admin-role
+  name: forkspacer-workspace-admin-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -658,7 +658,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-workspace-editor-role
+  name: forkspacer-workspace-editor-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -685,7 +685,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-workspace-viewer-role
+  name: forkspacer-workspace-viewer-role
 rules:
 - apiGroups:
   - batch.forkspacer.com
@@ -708,16 +708,16 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-leader-election-rolebinding
-  namespace: operator-system
+  name: forkspacer-leader-election-rolebinding
+  namespace: forkspacer-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: operator-leader-election-role
+  name: forkspacer-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: operator-controller-manager
-  namespace: operator-system
+  name: forkspacer-controller-manager
+  namespace: forkspacer-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -725,28 +725,28 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-manager-rolebinding
+  name: forkspacer-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: operator-manager-role
+  name: forkspacer-manager-role
 subjects:
 - kind: ServiceAccount
-  name: operator-controller-manager
-  namespace: operator-system
+  name: forkspacer-controller-manager
+  namespace: forkspacer-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: operator-metrics-auth-rolebinding
+  name: forkspacer-metrics-auth-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: operator-metrics-auth-role
+  name: forkspacer-metrics-auth-role
 subjects:
 - kind: ServiceAccount
-  name: operator-controller-manager
-  namespace: operator-system
+  name: forkspacer-controller-manager
+  namespace: forkspacer-system
 ---
 apiVersion: v1
 kind: Service
@@ -755,8 +755,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
     control-plane: controller-manager
-  name: operator-controller-manager-metrics-service
-  namespace: operator-system
+  name: forkspacer-controller-manager-metrics-service
+  namespace: forkspacer-system
 spec:
   ports:
   - name: https
@@ -773,8 +773,8 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-webhook-service
-  namespace: operator-system
+  name: forkspacer-webhook-service
+  namespace: forkspacer-system
 spec:
   ports:
   - port: 443
@@ -791,8 +791,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
     control-plane: controller-manager
-  name: operator-controller-manager
-  namespace: operator-system
+  name: forkspacer-controller-manager
+  namespace: forkspacer-system
 spec:
   replicas: 1
   selector:
@@ -816,7 +816,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.7
+        image: ghcr.io/forkspacer/forkspacer:v0.1.8
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -859,7 +859,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      serviceAccountName: operator-controller-manager
+      serviceAccountName: forkspacer-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
       - name: metrics-certs
@@ -883,15 +883,15 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-metrics-certs
-  namespace: operator-system
+  name: forkspacer-metrics-certs
+  namespace: forkspacer-system
 spec:
   dnsNames:
-  - operator-controller-manager-metrics-service.operator-system.svc
-  - operator-controller-manager-metrics-service.operator-system.svc.cluster.local
+  - forkspacer-controller-manager-metrics-service.forkspacer-system.svc
+  - forkspacer-controller-manager-metrics-service.forkspacer-system.svc.cluster.local
   issuerRef:
     kind: Issuer
-    name: operator-selfsigned-issuer
+    name: forkspacer-selfsigned-issuer
   secretName: metrics-server-cert
 ---
 apiVersion: cert-manager.io/v1
@@ -900,15 +900,15 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-serving-cert
-  namespace: operator-system
+  name: forkspacer-serving-cert
+  namespace: forkspacer-system
 spec:
   dnsNames:
-  - operator-webhook-service.operator-system.svc
-  - operator-webhook-service.operator-system.svc.cluster.local
+  - forkspacer-webhook-service.forkspacer-system.svc
+  - forkspacer-webhook-service.forkspacer-system.svc.cluster.local
   issuerRef:
     kind: Issuer
-    name: operator-selfsigned-issuer
+    name: forkspacer-selfsigned-issuer
   secretName: webhook-server-cert
 ---
 apiVersion: cert-manager.io/v1
@@ -917,8 +917,8 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: operator
-  name: operator-selfsigned-issuer
-  namespace: operator-system
+  name: forkspacer-selfsigned-issuer
+  namespace: forkspacer-system
 spec:
   selfSigned: {}
 ---
@@ -926,15 +926,15 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: operator-system/operator-serving-cert
-  name: operator-mutating-webhook-configuration
+    cert-manager.io/inject-ca-from: forkspacer-system/forkspacer-serving-cert
+  name: forkspacer-mutating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
     service:
-      name: operator-webhook-service
-      namespace: operator-system
+      name: forkspacer-webhook-service
+      namespace: forkspacer-system
       path: /mutate-batch-forkspacer-com-v1-module
   failurePolicy: Fail
   name: mmodule-v1.kb.io
@@ -953,8 +953,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: operator-webhook-service
-      namespace: operator-system
+      name: forkspacer-webhook-service
+      namespace: forkspacer-system
       path: /mutate-batch-forkspacer-com-v1-workspace
   failurePolicy: Fail
   name: mworkspace-v1.kb.io
@@ -974,15 +974,15 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: operator-system/operator-serving-cert
-  name: operator-validating-webhook-configuration
+    cert-manager.io/inject-ca-from: forkspacer-system/forkspacer-serving-cert
+  name: forkspacer-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
     service:
-      name: operator-webhook-service
-      namespace: operator-system
+      name: forkspacer-webhook-service
+      namespace: forkspacer-system
       path: /validate-batch-forkspacer-com-v1-module
   failurePolicy: Fail
   name: vmodule-v1.kb.io
@@ -1001,8 +1001,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: operator-webhook-service
-      namespace: operator-system
+      name: forkspacer-webhook-service
+      namespace: forkspacer-system
       path: /validate-batch-forkspacer-com-v1-workspace
   failurePolicy: Fail
   name: vworkspace-v1.kb.io

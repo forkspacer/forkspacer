@@ -1,6 +1,10 @@
 package kubernetes
 
-const BaseAnnotationKey = "forkspacer.com"
+const (
+	BaseAnnotationKey = "forkspacer.com"
+	BaseLabelKey      = "forkspacer.com"
+	OperatorNamespace = "forkspacer-system"
+)
 
 var ModuleAnnotationKeys = struct {
 	Resource,

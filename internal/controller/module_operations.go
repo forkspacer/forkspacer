@@ -137,6 +137,13 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
+		// If module is in Failed state and has no resource annotation, it means
+		// installation never completed, so there's nothing to uninstall
+		if module.Status.Phase == batchv1.ModulePhaseFailed {
+			log.Info("skipping uninstall for failed module with no resource annotation - nothing was installed",
+				"module", module.Name, "namespace", module.Namespace)
+			return nil
+		}
 		return fmt.Errorf("resource definition not found in module annotations for %s/%s", module.Namespace, module.Name)
 	}
 	moduleData := []byte(resourceAnnotation)

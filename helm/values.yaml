@@ -52,7 +52,7 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
-  serviceAccountName: operator-controller-manager
+  serviceAccountName: forkspacer-controller-manager
   serviceAccount:
     annotations: {}
 

@@ -11,7 +11,13 @@ var HelmMetaDataKeys = struct {
 }
 
 var CustomMetaDataKeys = struct {
-	PluginFilePath string
+	RunnerPodName,
+	RunnerPodUniqueLabel,
+	RunnerServiceName,
+	InnerMetaData string
 }{
-	PluginFilePath: "pluginFilePath",
+	RunnerPodName:        "runnerPodName",
+	RunnerPodUniqueLabel: "runnerPodUniqueLabel",
+	RunnerServiceName:    "runnerServiceName",
+	InnerMetaData:        "innerMetaData",
 }

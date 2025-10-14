@@ -1,18 +1,29 @@
 package manager
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"plugin"
+	"io"
+	"net/http"
+	"slices"
+	"time"
 
-	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/utils"
-	"github.com/go-logr/logr"
+	"github.com/go-viper/mapstructure/v2"
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -20,7 +31,7 @@ import (
 var _ base.IManager = ModuleCustomManager{}
 
 type ModuleCustomManager struct {
-	customManager base.IManager
+	controllerClient client.Client
 }
 
 func NewModuleCustomManager(
@@ -32,93 +43,512 @@ func NewModuleCustomManager(
 	metaData base.MetaData,
 ) (base.IManager, error) {
 	if err := customModule.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to validate custom module: %w", err)
 	}
 
-	pluginFile := metaData.DecodeToString(managerCons.CustomMetaDataKeys.PluginFilePath)
-	if pluginFile == "" {
-		fileWritePath := fileCons.BaseDir + "/custom-plugins/%x.so"
+	manager := &ModuleCustomManager{controllerClient}
 
-		if customModule.Spec.Repo.File != nil && *customModule.Spec.Repo.File != "" {
-			file, err := utils.WriteHTTPDataToFile(ctx,
-				*customModule.Spec.Repo.File,
-				fileWritePath,
-				false, true,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to write HTTP plugin file from %q: %w", *customModule.Spec.Repo.File, err)
-			}
-			_ = file.Close()
+	podName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerPodName)
+	podLabel := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerPodUniqueLabel)
 
-			pluginFile = file.Name()
-		} else if customModule.Spec.Repo.ConfigMap != nil {
-			namespace := customModule.Spec.Repo.ConfigMap.Namespace
-			if namespace == "" {
-				namespace = "default"
-			}
-
-			file, err := utils.WriteConfigMapToFile(ctx,
-				controllerClient,
-				namespace, customModule.Spec.Repo.ConfigMap.Name, kubernetesCons.ModuleConfigMapKeys.CustomPlugin,
-				fileWritePath,
-				false, true,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to write ConfigMap plugin file from %s/%s: %w",
-					namespace, customModule.Spec.Repo.ConfigMap.Name, err,
-				)
-			}
-			_ = file.Close()
-
-			pluginFile = file.Name()
-		} else {
-			return nil, fmt.Errorf("custom module does not specify a plugin file or configmap source")
+	if podName == "" {
+		var err error
+		podName, podLabel, err = manager.createRunnerPod(ctx, kubernetesConfig, customModule, config)
+		if err != nil {
+			return nil, err
 		}
-
-		metaData[managerCons.CustomMetaDataKeys.PluginFilePath] = pluginFile
+		metaData[managerCons.CustomMetaDataKeys.RunnerPodName] = podName
+		metaData[managerCons.CustomMetaDataKeys.RunnerPodUniqueLabel] = podLabel
 	}
 
-	customPlugin, err := plugin.Open(pluginFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open plugin file %q: %w", pluginFile, err)
+	serviceName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerServiceName)
+	if serviceName == "" {
+		var err error
+		serviceName, err = manager.createRunnerService(ctx, podLabel)
+		if err != nil {
+			return nil, err
+		}
+		metaData[managerCons.CustomMetaDataKeys.RunnerServiceName] = serviceName
 	}
 
-	newManagerSymbol, err := customPlugin.Lookup("NewManager")
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup 'NewManager' symbol in plugin: %w", err)
-	}
-
-	newManagerFunc, ok := newManagerSymbol.(func(ctx context.Context, logger logr.Logger, kubernetesConfig *rest.Config, config map[string]any) (base.IManager, error)) //nolint:lll
-	if !ok {
-		return nil, fmt.Errorf(
-			"symbol 'NewManager' found in plugin is not of type 'NewCustomManagerT' (%T)",
-			newManagerSymbol,
-		)
-	}
-
-	customManager, err := newManagerFunc(ctx, logf.FromContext(ctx), kubernetesConfig, config)
-	if err != nil {
+	if err := manager.waitForServiceReady(ctx, serviceName, podName); err != nil {
 		return nil, err
 	}
 
-	return &ModuleCustomManager{
-		customManager: customManager,
-	}, nil
+	return manager, nil
 }
 
 func (m ModuleCustomManager) Install(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Install(ctx, metaData)
+	serviceName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerServiceName)
+	if serviceName == "" {
+		return errors.New("runner service name is missing in metadata")
+	}
+
+	response, err := m.callRunnerEndpoint(ctx, serviceName, "install", metaData, 201)
+	if err != nil {
+		return err
+	}
+
+	if len(response) > 0 {
+		metaData[managerCons.CustomMetaDataKeys.InnerMetaData] = response
+	}
+
+	return nil
 }
 
 func (m ModuleCustomManager) Uninstall(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Uninstall(ctx, metaData)
+	log := logf.FromContext(ctx)
+
+	serviceName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerServiceName)
+	if serviceName == "" {
+		return errors.New("runner service name is missing in metadata")
+	}
+
+	if _, err := m.callRunnerEndpoint(ctx, serviceName, "uninstall", metaData, 204); err != nil {
+		return err
+	}
+
+	service := &corev1.Service{}
+	if err := m.controllerClient.Get(ctx, client.ObjectKey{
+		Name:      serviceName,
+		Namespace: kubernetesCons.OperatorNamespace,
+	}, service); err != nil {
+		log.Error(err, "failed to get custom module service for uninstallation", "serviceName", serviceName)
+	}
+
+	if err := m.controllerClient.Delete(ctx, service); err != nil {
+		return fmt.Errorf("failed to delete custom module service %s during uninstallation: %w", serviceName, err)
+	}
+
+	podName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerPodName)
+	if podName == "" {
+		return errors.New("runner pod name is missing in metadata")
+	}
+
+	pod := &corev1.Pod{}
+	if err := m.controllerClient.Get(ctx, client.ObjectKey{
+		Name:      podName,
+		Namespace: kubernetesCons.OperatorNamespace,
+	}, pod); err != nil {
+		log.Error(err, "failed to get custom module runner pod for uninstallation", "podName", podName)
+	}
+
+	if err := m.controllerClient.Delete(ctx, pod); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m ModuleCustomManager) Sleep(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Sleep(ctx, metaData)
+	serviceName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerServiceName)
+	if serviceName == "" {
+		return errors.New("runner service name is missing in metadata")
+	}
+
+	response, err := m.callRunnerEndpoint(ctx, serviceName, "sleep", metaData, 200)
+	if err != nil {
+		return err
+	}
+
+	if len(response) > 0 {
+		metaData[managerCons.CustomMetaDataKeys.InnerMetaData] = response
+	}
+
+	return nil
 }
 
 func (m ModuleCustomManager) Resume(ctx context.Context, metaData base.MetaData) error {
-	return m.customManager.Resume(ctx, metaData)
+	serviceName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerServiceName)
+	if serviceName == "" {
+		return errors.New("runner service name is missing in metadata")
+	}
+
+	response, err := m.callRunnerEndpoint(ctx, serviceName, "resume", metaData, 200)
+	if err != nil {
+		return err
+	}
+
+	if len(response) > 0 {
+		metaData[managerCons.CustomMetaDataKeys.InnerMetaData] = response
+	}
+
+	return nil
+}
+
+func (m *ModuleCustomManager) createRunnerPod(
+	ctx context.Context,
+	kubernetesConfig *rest.Config,
+	customModule *resources.CustomModule,
+	config map[string]any,
+) (podName, podLabel string, err error) {
+	log := logf.FromContext(ctx)
+
+	secret, err := m.createRunnerSecret(ctx, kubernetesConfig, customModule, config)
+	if err != nil {
+		return "", "", err
+	}
+
+	defer func() {
+		if err := m.controllerClient.Delete(ctx, secret); err != nil {
+			log.Error(err, "failed to delete runner secret")
+		}
+	}()
+
+	podLabel = "custom-manager-runner-" + time.Now().Format("20060102150405")
+	pod := m.buildRunnerPod(customModule, secret.Name, podLabel)
+
+	if err := m.controllerClient.Create(ctx, pod); err != nil {
+		return "", "", err
+	}
+
+	if err := m.waitForPodRunning(ctx, pod); err != nil {
+		if deleteErr := m.controllerClient.Delete(ctx, pod); deleteErr != nil {
+			log.Error(deleteErr, "failed to delete pod after error")
+		}
+		return "", "", err
+	}
+
+	return pod.Name, podLabel, nil
+}
+
+func (m *ModuleCustomManager) createRunnerSecret(
+	ctx context.Context,
+	kubernetesConfig *rest.Config,
+	customModule *resources.CustomModule,
+	config map[string]any,
+) (*corev1.Secret, error) {
+	log := logf.FromContext(ctx)
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal custom module configuration: %w", err)
+	}
+
+	data := map[string][]byte{
+		"config.json": configJSON,
+	}
+
+	for _, permission := range customModule.Spec.Permissions {
+		switch permission {
+		case resources.CustomModulePermissionWorkspace:
+			kubeconfig, err := clientcmd.Write(
+				*utils.ConvertRestConfigToAPIConfig(kubernetesConfig, "", "", ""),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write workspace kubeconfig: %w", err)
+			}
+			data["workspace_kubeconfig"] = kubeconfig
+		case resources.CustomModulePermissionController:
+		default:
+			err := fmt.Errorf("unsupported custom module permission: %s", permission)
+			log.Error(err, "encountered an unsupported permission during custom module secret generation")
+			return nil, err
+		}
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "custom-manager-",
+			Namespace:    kubernetesCons.OperatorNamespace,
+			Labels: map[string]string{
+				kubernetesCons.BaseLabelKey: "custom-manager-runner-secret",
+			},
+		},
+		Immutable: utils.ToPtr(true),
+		Data:      data,
+		Type:      corev1.SecretTypeOpaque,
+	}
+
+	if err := m.controllerClient.Create(ctx, secret); err != nil {
+		return nil, fmt.Errorf("failed to create custom module secret: %w", err)
+	}
+
+	return secret, nil
+}
+
+func (m *ModuleCustomManager) buildRunnerPod(
+	customModule *resources.CustomModule,
+	secretName, podLabel string,
+) *corev1.Pod {
+	imagePullSecrets := make([]corev1.LocalObjectReference, len(customModule.Spec.ImagePullSecrets))
+	for i, imagePullSecret := range customModule.Spec.ImagePullSecrets {
+		imagePullSecrets[i] = corev1.LocalObjectReference{Name: imagePullSecret}
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "custom-manager-",
+			Namespace:    kubernetesCons.OperatorNamespace,
+			Labels: map[string]string{
+				kubernetesCons.BaseLabelKey: podLabel,
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy:    corev1.RestartPolicyNever,
+			ImagePullSecrets: imagePullSecrets,
+			Containers: []corev1.Container{
+				{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceEphemeralStorage: resource.MustParse("500Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceEphemeralStorage: resource.MustParse("5Gi"),
+						},
+					},
+					Name:  "worker",
+					Image: customModule.Spec.Image,
+					Ports: []corev1.ContainerPort{
+						{ContainerPort: 8080},
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "PORT",
+							Value: "8080",
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "secret-volume",
+							MountPath: "/forkspacer",
+							ReadOnly:  false,
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "secret-volume",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: secretName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if slices.Contains(customModule.Spec.Permissions, resources.CustomModulePermissionController) {
+		pod.Spec.ServiceAccountName = "forkspacer-controller-manager"
+	}
+
+	return pod
+}
+
+func (m *ModuleCustomManager) waitForPodRunning(ctx context.Context, pod *corev1.Pod) error {
+	imagePullErrCnt := 0
+
+	for {
+		if err := m.controllerClient.Get(ctx, client.ObjectKeyFromObject(pod), pod); err != nil {
+			return err
+		}
+
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			return nil
+		case "", corev1.PodPending:
+			if len(pod.Status.ContainerStatuses) > 0 {
+				stat := pod.Status.ContainerStatuses[0]
+
+				if stat.State.Waiting != nil {
+					switch stat.State.Waiting.Reason {
+					case "ImagePullBackOff", "ErrImagePull":
+						imagePullErrCnt++
+					}
+				}
+			}
+
+			if imagePullErrCnt >= 3 {
+				return fmt.Errorf(
+					"failed to pull image for custom module runner pod %s after %d attempts",
+					pod.Name, imagePullErrCnt,
+				)
+			}
+			time.Sleep(time.Second * 2)
+		case corev1.PodSucceeded:
+			return fmt.Errorf("custom module runner pod succeeded unexpectedly: pod phase %s", pod.Status.Phase)
+		case corev1.PodFailed:
+			return fmt.Errorf("custom module runner pod failed: pod phase %s", pod.Status.Phase)
+		default:
+			return fmt.Errorf("custom module runner pod entered an unexpected phase: %s", pod.Status.Phase)
+		}
+	}
+}
+
+func (m *ModuleCustomManager) createRunnerService(ctx context.Context, podLabel string) (string, error) {
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "custom-manager-",
+			Namespace:    kubernetesCons.OperatorNamespace,
+			Labels: map[string]string{
+				kubernetesCons.BaseLabelKey: "custom-manager-service",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				kubernetesCons.BaseLabelKey: podLabel,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Protocol:   corev1.ProtocolTCP,
+					Port:       80,
+					TargetPort: intstr.FromInt(8080),
+				},
+			},
+		},
+	}
+
+	if err := m.controllerClient.Create(ctx, service); err != nil {
+		return "", err
+	}
+
+	return service.Name, nil
+}
+
+func (m *ModuleCustomManager) waitForServiceReady(ctx context.Context, serviceName, podName string) error {
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return m.cleanupResourcesOnTimeout(ctx, serviceName, podName)
+		case <-ticker.C:
+			ready, err := m.isServiceReady(ctx, kubernetesCons.OperatorNamespace, serviceName)
+			if err != nil {
+				return fmt.Errorf("failed to check service readiness: %w", err)
+			}
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+func (m *ModuleCustomManager) cleanupResourcesOnTimeout(ctx context.Context, serviceName, podName string) error {
+	log := logf.FromContext(ctx)
+
+	// Delete service
+	service := &corev1.Service{}
+	if err := m.controllerClient.Get(ctx, client.ObjectKey{
+		Name:      serviceName,
+		Namespace: kubernetesCons.OperatorNamespace,
+	}, service); err != nil {
+		log.Error(err, "failed to get service for cleanup after timeout", "serviceName", serviceName)
+	} else {
+		if err := m.controllerClient.Delete(ctx, service); err != nil {
+			log.Error(err, "failed to delete service during cleanup", "serviceName", serviceName)
+		}
+	}
+
+	// Delete pod
+	if podName != "" {
+		pod := &corev1.Pod{}
+		if err := m.controllerClient.Get(ctx, client.ObjectKey{
+			Name:      podName,
+			Namespace: kubernetesCons.OperatorNamespace,
+		}, pod); err != nil {
+			log.Error(err, "failed to get pod for cleanup after timeout", "podName", podName)
+		} else {
+			if err := m.controllerClient.Delete(ctx, pod); err != nil {
+				log.Error(err, "failed to delete pod during cleanup", "podName", podName)
+			}
+		}
+	}
+
+	return fmt.Errorf("service %s did not become ready within 30 seconds", serviceName)
+}
+
+func (m *ModuleCustomManager) callRunnerEndpoint(
+	ctx context.Context,
+	serviceName, endpoint string,
+	metaData base.MetaData,
+	successStatus int,
+) (map[string]any, error) {
+	log := logf.FromContext(ctx)
+
+	jsonBytes := m.encodeMetaData(ctx, metaData)
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:80/%s", serviceName, kubernetesCons.OperatorNamespace, endpoint)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body for custom module %s: %w", endpoint, err)
+	}
+
+	switch resp.StatusCode {
+	case 400:
+		if len(responseBody) > 0 {
+			return nil, fmt.Errorf("custom module %s endpoint returned error: %s", endpoint, string(responseBody))
+		}
+		return nil, fmt.Errorf("custom module %s endpoint returned error with empty body", endpoint)
+	case successStatus:
+	default:
+		return nil, fmt.Errorf(
+			"failed to %s custom module %s: received unexpected status code %d, expected %d/400",
+			endpoint, serviceName, resp.StatusCode, successStatus,
+		)
+	}
+
+	if len(responseBody) == 0 {
+		return nil, nil
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		log.Error(err, "failed to unmarshal response body", "endpoint", endpoint, "response", string(responseBody))
+		return nil, fmt.Errorf("failed to unmarshal %s response body after successful request: %w", endpoint, err)
+	}
+
+	return response, nil
+}
+
+func (m *ModuleCustomManager) encodeMetaData(ctx context.Context, metaData base.MetaData) []byte {
+	log := logf.FromContext(ctx)
+
+	decodedMap := make(map[string]any)
+	if err := mapstructure.Decode(metaData[managerCons.CustomMetaDataKeys.InnerMetaData], &decodedMap); err != nil {
+		log.Error(err, "failed to decode InnerMetaData")
+	}
+
+	jsonBytes, err := json.Marshal(decodedMap)
+	if err != nil {
+		log.Error(err, "failed to marshal decoded InnerMetaData to JSON")
+		return []byte("{}")
+	}
+
+	return jsonBytes
+}
+
+func (m *ModuleCustomManager) isServiceReady(ctx context.Context, namespace, serviceName string) (bool, error) {
+	endpointSliceList := &discoveryv1.EndpointSliceList{}
+	err := m.controllerClient.List(ctx, endpointSliceList,
+		client.InNamespace(namespace),
+		client.MatchingLabels{
+			discoveryv1.LabelServiceName: serviceName,
+		},
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to list endpointslices: %w", err)
+	}
+
+	// Check if there are any ready endpoints
+	for _, endpointSlice := range endpointSliceList.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			// Check if endpoint is ready
+			if endpoint.Conditions.Ready != nil && *endpoint.Conditions.Ready {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }

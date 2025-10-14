@@ -66,14 +66,14 @@ helm repo update
 
 # Install operator only (minimal)
 helm install forkspacer forkspacer/forkspacer \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 
 # Install with web UI and API server enabled
 helm install forkspacer forkspacer/forkspacer \
   --set operator-ui.enabled=true \
   --set api-server.enabled=true \
-  --namespace operator-system \
+  --namespace forkspacer-system \
   --create-namespace
 ```
 
@@ -81,10 +81,10 @@ helm install forkspacer forkspacer/forkspacer \
 
 ```bash
 # Port-forward to access the web UI locally
-kubectl port-forward svc/forkspacer-operator-ui 3000:80 -n operator-system
+kubectl port-forward svc/operator-ui 3000:80 -n forkspacer-system
 
 # Access API
-kubectl port-forward svc/forkspacer-api-server 8421:8080 -n operator-system
+kubectl port-forward svc/forkspacer-api-server 8421:8080 -n forkspacer-system
 
 # Visit: http://localhost:3000
 ```
