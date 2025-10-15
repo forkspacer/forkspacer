@@ -53,6 +53,14 @@ type HelmModuleSpec struct {
 			Enabled bool     `yaml:"enabled"`
 			Names   []string `yaml:"names"`
 		} `yaml:"pvc,omitempty"`
+		Secret *struct {
+			Enabled bool     `yaml:"enabled"`
+			Names   []string `yaml:"names"`
+		} `yaml:"secret,omitempty"`
+		ConfigMap *struct {
+			Enabled bool     `yaml:"enabled"`
+			Names   []string `yaml:"names"`
+		} `yaml:"configMap,omitempty"`
 	} `yaml:"migration,omitempty"`
 }
 
