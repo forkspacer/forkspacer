@@ -128,6 +128,10 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	allErrs := validateWorkspace(ctx, v.Client, workspace)
 
+	if err := validateWorkspaceFromReference(ctx, v.Client, workspace.Spec.From); err != nil {
+		allErrs = append(allErrs, err)
+	}
+
 	if len(allErrs) > 0 {
 		return nil, apierrors.NewInvalid(
 			schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Workspace"},
@@ -222,10 +226,6 @@ func validateWorkspaceSpec(ctx context.Context, c client.Client, workspace *batc
 				)
 			}
 		}
-	}
-
-	if err := validateWorkspaceFromReference(ctx, c, workspace.Spec.From); err != nil {
-		allErrs = append(allErrs, err)
 	}
 
 	if errs := validateWorkspaceSecretReference(ctx, c, workspace.Spec.Connection); errs != nil {

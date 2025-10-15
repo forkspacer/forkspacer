@@ -22,8 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -37,7 +37,7 @@ type ModuleCustomManager struct {
 func NewModuleCustomManager(
 	ctx context.Context,
 	controllerClient client.Client,
-	kubernetesConfig *rest.Config,
+	apiConfig *clientcmdapi.Config,
 	customModule *resources.CustomModule,
 	config map[string]any,
 	metaData base.MetaData,
@@ -53,7 +53,7 @@ func NewModuleCustomManager(
 
 	if podName == "" {
 		var err error
-		podName, podLabel, err = manager.createRunnerPod(ctx, kubernetesConfig, customModule, config)
+		podName, podLabel, err = manager.createRunnerPod(ctx, apiConfig, customModule, config)
 		if err != nil {
 			return nil, err
 		}
@@ -178,13 +178,13 @@ func (m ModuleCustomManager) Resume(ctx context.Context, metaData base.MetaData)
 
 func (m *ModuleCustomManager) createRunnerPod(
 	ctx context.Context,
-	kubernetesConfig *rest.Config,
+	apiConfig *clientcmdapi.Config,
 	customModule *resources.CustomModule,
 	config map[string]any,
 ) (podName, podLabel string, err error) {
 	log := logf.FromContext(ctx)
 
-	secret, err := m.createRunnerSecret(ctx, kubernetesConfig, customModule, config)
+	secret, err := m.createRunnerSecret(ctx, apiConfig, customModule, config)
 	if err != nil {
 		return "", "", err
 	}
@@ -214,7 +214,7 @@ func (m *ModuleCustomManager) createRunnerPod(
 
 func (m *ModuleCustomManager) createRunnerSecret(
 	ctx context.Context,
-	kubernetesConfig *rest.Config,
+	apiConfig *clientcmdapi.Config,
 	customModule *resources.CustomModule,
 	config map[string]any,
 ) (*corev1.Secret, error) {
@@ -232,9 +232,7 @@ func (m *ModuleCustomManager) createRunnerSecret(
 	for _, permission := range customModule.Spec.Permissions {
 		switch permission {
 		case resources.CustomModulePermissionWorkspace:
-			kubeconfig, err := clientcmd.Write(
-				*utils.ConvertRestConfigToAPIConfig(kubernetesConfig, "", "", ""),
-			)
+			kubeconfig, err := clientcmd.Write(*apiConfig)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write workspace kubeconfig: %w", err)
 			}

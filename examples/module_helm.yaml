@@ -9,14 +9,7 @@ spec:
       kind: Helm
       metadata:
         name: redis
-        version: "1.0.0"
         supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
-        author: "platform-team"
-        description: "Redis in-memory data store"
-        category: "database"
-        resource_usage:
-          cpu: "200m"
-          memory: "256Mi"
 
       config:
         - type: option
@@ -51,10 +44,12 @@ spec:
           - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
           - raw:
               replica:
-                replicaCount: "{{.config.replicaCount}}"
-          # - configMap:
-          #     namespace: default
-          #     name: redis-values
+                replicaCount: 0
+              image:
+                repository: bitnamilegacy/redis
+              global:
+                security:
+                  allowInsecureImages: true
 
         outputs:
           - name: "Redis Hostname"
