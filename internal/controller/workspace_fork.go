@@ -195,6 +195,16 @@ func (r *WorkspaceReconciler) migrateModuleData(
 		return fmt.Errorf("failed to migrate PVCs: %w", err)
 	}
 
+	// Perform Secret migration
+	if err := r.migrateSecrets(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
+		return fmt.Errorf("failed to migrate Secrets: %w", err)
+	}
+
+	// Perform ConfigMap migration
+	if err := r.migrateConfigMaps(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
+		return fmt.Errorf("failed to migrate ConfigMaps: %w", err)
+	}
+
 	return nil
 }
 
@@ -239,6 +249,102 @@ func (r *WorkspaceReconciler) migratePVCs(
 				"sourcePVC", sourcePVCName,
 				"sourceNamespace", sourceHelmModule.Spec.Namespace,
 				"destinationPVC", destHelmModule.Spec.Migration.PVC.Names[i],
+				"destinationNamespace", destHelmModule.Spec.Namespace)
+		}
+	}
+
+	return nil
+}
+
+// migrateSecrets handles the migration of Secrets from source to destination module
+func (r *WorkspaceReconciler) migrateSecrets(
+	ctx context.Context,
+	sourceHelmModule, destHelmModule resources.HelmModule,
+	sourceWorkspace, destWorkspace *batchv1.Workspace,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Check if Secret migration is enabled
+	if sourceHelmModule.Spec.Migration == nil ||
+		sourceHelmModule.Spec.Migration.Secret == nil ||
+		!sourceHelmModule.Spec.Migration.Secret.Enabled ||
+		len(sourceHelmModule.Spec.Migration.Secret.Names) == 0 {
+		return nil
+	}
+
+	// Create Secret migration service
+	secretMigrationService := services.NewSecretMigrationService(&log)
+
+	// Get kubeconfig for destination workspace
+	destKubeConfig, err := NewAPIConfig(ctx, &destWorkspace.Spec.Connection, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get destination kubeconfig: %w", err)
+	}
+
+	// Get kubeconfig for source workspace
+	sourceKubeConfig, err := NewAPIConfig(ctx, &sourceWorkspace.Spec.Connection, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get source kubeconfig: %w", err)
+	}
+
+	// Migrate each Secret
+	for i, sourceSecretName := range sourceHelmModule.Spec.Migration.Secret.Names {
+		if err := secretMigrationService.MigrateSecret(ctx,
+			sourceKubeConfig, sourceSecretName, sourceHelmModule.Spec.Namespace,
+			destKubeConfig, destHelmModule.Spec.Migration.Secret.Names[i], destHelmModule.Spec.Namespace,
+		); err != nil {
+			log.Error(err, "failed to migrate Secret",
+				"sourceSecret", sourceSecretName,
+				"sourceNamespace", sourceHelmModule.Spec.Namespace,
+				"destinationSecret", destHelmModule.Spec.Migration.Secret.Names[i],
+				"destinationNamespace", destHelmModule.Spec.Namespace)
+		}
+	}
+
+	return nil
+}
+
+// migrateConfigMaps handles the migration of ConfigMaps from source to destination module
+func (r *WorkspaceReconciler) migrateConfigMaps(
+	ctx context.Context,
+	sourceHelmModule, destHelmModule resources.HelmModule,
+	sourceWorkspace, destWorkspace *batchv1.Workspace,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Check if ConfigMap migration is enabled
+	if sourceHelmModule.Spec.Migration == nil ||
+		sourceHelmModule.Spec.Migration.ConfigMap == nil ||
+		!sourceHelmModule.Spec.Migration.ConfigMap.Enabled ||
+		len(sourceHelmModule.Spec.Migration.ConfigMap.Names) == 0 {
+		return nil
+	}
+
+	// Create ConfigMap migration service
+	configMapMigrationService := services.NewConfigMapMigrationService(&log)
+
+	// Get kubeconfig for destination workspace
+	destKubeConfig, err := NewAPIConfig(ctx, &destWorkspace.Spec.Connection, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get destination kubeconfig: %w", err)
+	}
+
+	// Get kubeconfig for source workspace
+	sourceKubeConfig, err := NewAPIConfig(ctx, &sourceWorkspace.Spec.Connection, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get source kubeconfig: %w", err)
+	}
+
+	// Migrate each ConfigMap
+	for i, sourceConfigMapName := range sourceHelmModule.Spec.Migration.ConfigMap.Names {
+		if err := configMapMigrationService.MigrateConfigMap(ctx,
+			sourceKubeConfig, sourceConfigMapName, sourceHelmModule.Spec.Namespace,
+			destKubeConfig, destHelmModule.Spec.Migration.ConfigMap.Names[i], destHelmModule.Spec.Namespace,
+		); err != nil {
+			log.Error(err, "failed to migrate ConfigMap",
+				"sourceConfigMap", sourceConfigMapName,
+				"sourceNamespace", sourceHelmModule.Spec.Namespace,
+				"destinationConfigMap", destHelmModule.Spec.Migration.ConfigMap.Names[i],
 				"destinationNamespace", destHelmModule.Spec.Namespace)
 		}
 	}

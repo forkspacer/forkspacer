@@ -74,6 +74,14 @@ spec:
             enabled: true
             names:
               - "redis-data-{{.releaseName}}-master-0"
+          configMap:
+            enabled: false
+            names:
+              - ""
+          secret:
+            enabled: true
+            names:
+              - "{{.releaseName}}"
 
   workspace:
     name: default
