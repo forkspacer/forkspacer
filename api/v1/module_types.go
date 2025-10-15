@@ -112,6 +112,19 @@ type ModuleSourceChartGit struct {
 	// +kubebuilder:default=main
 	// +optional
 	Revision string `json:"revision,omitempty"`
+
+	// Authentication credentials for private repositories
+	// +optional
+	Auth *ModuleSourceChartGitAuth `json:"auth,omitempty"`
+}
+
+// ModuleSourceChartGitAuth defines authentication for Git repositories
+type ModuleSourceChartGitAuth struct {
+	// Reference to a Secret containing Git credentials
+	// For HTTPS: username and password/token fields
+	// For SSH: sshPrivateKey field
+	// +required
+	SecretRef ModuleSourceConfigMapRef `json:"secretRef"`
 }
 
 type ModuleSource struct {

@@ -100,6 +100,32 @@ spec:
                           git:
                             description: Git repository containing Helm chart
                             properties:
+                              auth:
+                                description: Authentication credentials for private
+                                  repositories
+                                properties:
+                                  secretRef:
+                                    description: |-
+                                      Reference to a Secret containing Git credentials
+                                      For HTTPS: username and password/token fields
+                                      For SSH: sshPrivateKey field
+                                    properties:
+                                      name:
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                      namespace:
+                                        default: default
+                                        maxLength: 63
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    - namespace
+                                    type: object
+                                required:
+                                - secretRef
+                                type: object
                               path:
                                 description: Path to the chart directory containing
                                   Chart.yaml

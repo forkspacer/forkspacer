@@ -303,6 +303,42 @@ func validateModuleSource(
 					"git path is required",
 				)
 			}
+
+			// Validate auth secret if provided
+			if chartSource.Git.Auth != nil {
+				secret := &corev1.Secret{}
+				err := c.Get(ctx, k8sTypes.NamespacedName{
+					Name:      chartSource.Git.Auth.SecretRef.Name,
+					Namespace: chartSource.Git.Auth.SecretRef.Namespace,
+				}, secret)
+
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						return field.Invalid(
+							fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+							chartSource.Git.Auth.SecretRef,
+							fmt.Sprintf("secret %s/%s not found",
+								chartSource.Git.Auth.SecretRef.Namespace, chartSource.Git.Auth.SecretRef.Name),
+						)
+					}
+					return field.InternalError(
+						fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+						fmt.Errorf("failed to validate Secret reference: %v", err),
+					)
+				}
+
+				// Validate that secret contains required fields for HTTPS or SSH
+				hasHTTPSAuth := secret.Data["username"] != nil && secret.Data["password"] != nil
+				hasSSHAuth := secret.Data["sshPrivateKey"] != nil
+
+				if !hasHTTPSAuth && !hasSSHAuth {
+					return field.Invalid(
+						fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+						chartSource.Git.Auth.SecretRef,
+						"secret must contain either 'username' and 'password' fields (for HTTPS) or 'sshPrivateKey' field (for SSH)",
+					)
+				}
+			}
 		}
 
 		return nil

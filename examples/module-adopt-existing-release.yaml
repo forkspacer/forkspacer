@@ -1,5 +1,7 @@
 # Example: Adopting an existing Helm release with chart source
 # Chart source is REQUIRED for managing the release (hibernate/resume and future upgrades)
+#
+# For Git authentication secrets, see: git-auth-secrets.yaml
 
 ---
 # Example 1: Public Helm repository
@@ -28,11 +30,11 @@ spec:
   hibernated: false
 
 ---
-# Example 2: Git repository containing Helm chart
+# Example 2: Git repository containing Helm chart (public repo)
 apiVersion: batch.forkspacer.com/v1
 kind: Module
 metadata:
-  name: adopted-app-git
+  name: adopted-app-git-public
   namespace: default
 spec:
   source:
@@ -40,7 +42,7 @@ spec:
       name: my-app-existing
       namespace: default
 
-      # Chart from Git repository
+      # Chart from public Git repository
       chartSource:
         git:
           repo: https://github.com/myorg/charts
@@ -54,7 +56,69 @@ spec:
   hibernated: false
 
 ---
-# Example 3: Chart from HTTP URL
+# Example 3: Private Git repository with HTTPS authentication
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: adopted-app-git-https
+  namespace: default
+spec:
+  source:
+    existingHelmRelease:
+      name: my-private-app
+      namespace: default
+
+      chartSource:
+        git:
+          repo: https://github.com/myorg/private-charts
+          path: my-app/
+          revision: main
+
+          # Authentication for private repo
+          auth:
+            secretRef:
+              name: git-https-credentials
+              namespace: default
+
+  workspace:
+    name: default
+    namespace: default
+
+  hibernated: false
+
+---
+# Example 4: Private Git repository with SSH authentication
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: adopted-app-git-ssh
+  namespace: default
+spec:
+  source:
+    existingHelmRelease:
+      name: my-ssh-app
+      namespace: default
+
+      chartSource:
+        git:
+          repo: git@github.com:myorg/private-charts.git
+          path: my-app/
+          revision: main
+
+          # SSH authentication
+          auth:
+            secretRef:
+              name: git-ssh-key
+              namespace: default
+
+  workspace:
+    name: default
+    namespace: default
+
+  hibernated: false
+
+---
+# Example 5: Chart from HTTP URL
 apiVersion: batch.forkspacer.com/v1
 kind: Module
 metadata:
