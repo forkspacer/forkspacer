@@ -86,6 +86,9 @@ func (s *SecretMigrationService) MigrateSecret(
 		s.logger.Info("destination secret is immutable, deleting and recreating",
 			"name", destSecretName, "namespace", destSecretNamespace)
 
+		preservedLabels := destSecret.Labels
+		preservedAnnotations := destSecret.Annotations
+
 		err = destClientset.CoreV1().Secrets(destSecretNamespace).Delete(ctx, destSecretName, metav1.DeleteOptions{})
 		if err != nil {
 			return fmt.Errorf(
@@ -98,8 +101,8 @@ func (s *SecretMigrationService) MigrateSecret(
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        destSecretName,
 				Namespace:   destSecretNamespace,
-				Labels:      sourceSecret.Labels,
-				Annotations: sourceSecret.Annotations,
+				Labels:      preservedLabels,
+				Annotations: preservedAnnotations,
 			},
 			Type:       sourceSecret.Type,
 			Data:       sourceSecret.Data,

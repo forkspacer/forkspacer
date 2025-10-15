@@ -87,6 +87,9 @@ func (s *ConfigMapMigrationService) MigrateConfigMap(
 		s.logger.Info("destination configmap is immutable, deleting and recreating",
 			"name", destConfigMapName, "namespace", destConfigMapNamespace)
 
+		preservedLabels := destConfigMap.Labels
+		preservedAnnotations := destConfigMap.Annotations
+
 		err = destClientset.CoreV1().ConfigMaps(destConfigMapNamespace).Delete(ctx, destConfigMapName, metav1.DeleteOptions{})
 		if err != nil {
 			return fmt.Errorf(
@@ -99,8 +102,8 @@ func (s *ConfigMapMigrationService) MigrateConfigMap(
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        destConfigMapName,
 				Namespace:   destConfigMapNamespace,
-				Labels:      sourceConfigMap.Labels,
-				Annotations: sourceConfigMap.Annotations,
+				Labels:      preservedLabels,
+				Annotations: preservedAnnotations,
 			},
 			Data:       sourceConfigMap.Data,
 			BinaryData: sourceConfigMap.BinaryData,
