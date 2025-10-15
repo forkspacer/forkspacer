@@ -251,7 +251,60 @@ func validateModuleSource(
 			"'github' module source type is not yet supported",
 		)
 	} else if moduleSource.ExistingHelmRelease != nil {
-		// ExistingHelmRelease is now supported - no validation needed
+		// Validate chartSource is provided and valid
+		if moduleSource.ExistingHelmRelease.ChartSource == nil {
+			return field.Required(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				"chartSource is required for existingHelmRelease",
+			)
+		}
+
+		// Validate that exactly one chart source type is specified
+		chartSource := moduleSource.ExistingHelmRelease.ChartSource
+		sourceCount := 0
+		if chartSource.Repository != nil {
+			sourceCount++
+		}
+		if chartSource.Git != nil {
+			sourceCount++
+		}
+		if chartSource.ConfigMap != nil {
+			sourceCount++
+		}
+		if chartSource.HttpURL != nil {
+			sourceCount++
+		}
+
+		if sourceCount == 0 {
+			return field.Required(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				"exactly one of 'repository', 'git', 'configMap', or 'httpURL' must be specified",
+			)
+		}
+		if sourceCount > 1 {
+			return field.Invalid(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				chartSource,
+				"only one of 'repository', 'git', 'configMap', or 'httpURL' can be specified",
+			)
+		}
+
+		// Validate Git repo URL if provided
+		if chartSource.Git != nil {
+			if chartSource.Git.Repo == "" {
+				return field.Required(
+					fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("repo"),
+					"git repo URL is required",
+				)
+			}
+			if chartSource.Git.Path == "" {
+				return field.Required(
+					fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("path"),
+					"git path is required",
+				)
+			}
+		}
+
 		return nil
 	} else {
 		return field.Invalid(

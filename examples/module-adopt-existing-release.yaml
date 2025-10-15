@@ -1,0 +1,76 @@
+# Example: Adopting an existing Helm release with chart source
+# Chart source is REQUIRED for managing the release (hibernate/resume and future upgrades)
+
+---
+# Example 1: Public Helm repository
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: adopted-nginx-repo
+  namespace: default
+spec:
+  source:
+    existingHelmRelease:
+      name: nginx-existing  # Name of the existing Helm release
+      namespace: default    # Namespace where the release is deployed
+
+      # Required: Chart source for managing the release
+      chartSource:
+        repository:
+          url: https://charts.bitnami.com/bitnami
+          chart: nginx
+          version: "22.0.10"
+
+  workspace:
+    name: default
+    namespace: default
+
+  hibernated: false
+
+---
+# Example 2: Git repository containing Helm chart
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: adopted-app-git
+  namespace: default
+spec:
+  source:
+    existingHelmRelease:
+      name: my-app-existing
+      namespace: default
+
+      # Chart from Git repository
+      chartSource:
+        git:
+          repo: https://github.com/myorg/charts
+          path: my-app/  # Folder containing Chart.yaml
+          revision: main  # Optional: defaults to main
+
+  workspace:
+    name: default
+    namespace: default
+
+  hibernated: false
+
+---
+# Example 3: Chart from HTTP URL
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: adopted-app-http
+  namespace: default
+spec:
+  source:
+    existingHelmRelease:
+      name: my-app-existing
+      namespace: default
+
+      chartSource:
+        httpURL: "https://example.com/charts/my-app-1.0.0.tgz"
+
+  workspace:
+    name: default
+    namespace: default
+
+  hibernated: false

@@ -79,9 +79,8 @@ spec:
                     properties:
                       chartSource:
                         description: |-
-                          ChartSource is optional. If provided, the release will be managed using this chart source
-                          for future operations (upgrades, reconfigurations). If not provided, the release will be
-                          adopted in snapshot mode using the current rendered manifests.
+                          ChartSource defines the Helm chart source for managing this release.
+                          Required for installation and future operations (upgrades, reconfigurations).
                         properties:
                           configMap:
                             properties:
@@ -97,6 +96,27 @@ spec:
                             required:
                             - name
                             - namespace
+                            type: object
+                          git:
+                            description: Git repository containing Helm chart
+                            properties:
+                              path:
+                                description: Path to the chart directory containing
+                                  Chart.yaml
+                                minLength: 1
+                                type: string
+                              repo:
+                                description: Repository URL (https or ssh)
+                                minLength: 1
+                                type: string
+                              revision:
+                                default: main
+                                description: Git revision (branch, tag, or commit
+                                  SHA)
+                                type: string
+                            required:
+                            - path
+                            - repo
                             type: object
                           httpURL:
                             type: string
@@ -126,6 +146,7 @@ spec:
                         minLength: 1
                         type: string
                     required:
+                    - chartSource
                     - name
                     - namespace
                     type: object
