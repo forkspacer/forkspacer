@@ -4,16 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
-	"github.com/forkspacer/forkspacer/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -218,55 +214,26 @@ func (r *WorkspaceReconciler) migratePVCs(
 		return nil
 	}
 
-	// Create PV migration service
-	pvMigrateService := services.NewPVMigrateService(nil)
+	// Create PVC migration service
+	pvcMigrationService := services.NewPVCMigrationService(&log)
 
 	// Get kubeconfig for destination workspace
-	destKubeConfig, err := NewKubernetesConfig(ctx, &destWorkspace.Spec.Connection, r.Client)
+	destKubeConfig, err := NewAPIConfig(ctx, &destWorkspace.Spec.Connection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to get destination kubeconfig: %w", err)
 	}
 
 	// Get kubeconfig for source workspace
-	sourceKubeConfig, err := NewKubernetesConfig(ctx, &sourceWorkspace.Spec.Connection, r.Client)
+	sourceKubeConfig, err := NewAPIConfig(ctx, &sourceWorkspace.Spec.Connection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to get source kubeconfig: %w", err)
 	}
 
-	// Create temporary kubeconfig files
-	destKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("dest-kubeconfig-%s-*.yaml", destWorkspace.Name))
-	destKubeconfigData, err := clientcmd.Write(*utils.ConvertRestConfigToAPIConfig(destKubeConfig, "", "", ""))
-	if err != nil {
-		return fmt.Errorf("failed to write destination kubeconfig: %w", err)
-	}
-	if err := os.WriteFile(destKubeconfigPath, destKubeconfigData, 0600); err != nil {
-		return fmt.Errorf("failed to save destination kubeconfig: %w", err)
-	}
-
-	sourceKubeconfigPath := filepath.Join(os.TempDir(), fmt.Sprintf("source-kubeconfig-%s-*.yaml", sourceWorkspace.Name))
-	sourceKubeconfigData, err := clientcmd.Write(*utils.ConvertRestConfigToAPIConfig(sourceKubeConfig, "", "", ""))
-	if err != nil {
-		return fmt.Errorf("failed to write source kubeconfig: %w", err)
-	}
-	if err := os.WriteFile(sourceKubeconfigPath, sourceKubeconfigData, 0600); err != nil {
-		return fmt.Errorf("failed to save source kubeconfig: %w", err)
-	}
-
-	// Clean up temporary files
-	defer func() {
-		if err := os.Remove(destKubeconfigPath); err != nil {
-			log.Error(err, "failed to remove temp destination kubeconfig file", "path", destKubeconfigPath)
-		}
-		if err := os.Remove(sourceKubeconfigPath); err != nil {
-			log.Error(err, "failed to remove temp source kubeconfig file", "path", sourceKubeconfigPath)
-		}
-	}()
-
 	// Migrate each PVC
 	for i, sourcePVCName := range sourceHelmModule.Spec.Migration.PVC.Names {
-		if err := pvMigrateService.MigratePVC(ctx,
-			sourceKubeconfigPath, sourcePVCName, sourceHelmModule.Spec.Namespace,
-			destKubeconfigPath, destHelmModule.Spec.Migration.PVC.Names[i], destHelmModule.Spec.Namespace,
+		if err := pvcMigrationService.MigratePVC(ctx,
+			sourceKubeConfig, sourcePVCName, sourceHelmModule.Spec.Namespace,
+			destKubeConfig, destHelmModule.Spec.Migration.PVC.Names[i], destHelmModule.Spec.Namespace,
 		); err != nil {
 			log.Error(err, "failed to migrate PVC",
 				"sourcePVC", sourcePVCName,

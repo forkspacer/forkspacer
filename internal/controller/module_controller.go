@@ -25,7 +25,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/rest"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -282,12 +282,12 @@ func (r *ModuleReconciler) newManager(
 			return nil
 		},
 		func(customModule resources.CustomModule) error {
-			kubernetesConfig, err := r.newKubernetesConfig(ctx, workspaceConnection)
+			apiConfig, err := r.newAPIConfig(ctx, workspaceConnection)
 			if err != nil {
 				return fmt.Errorf("failed to create Kubernetes config: %w", err)
 			}
 
-			iManager, err = manager.NewModuleCustomManager(ctx, r.Client, kubernetesConfig, &customModule, configMap, metaData)
+			iManager, err = manager.NewModuleCustomManager(ctx, r.Client, apiConfig, &customModule, configMap, metaData)
 			if err != nil {
 				return fmt.Errorf("failed to install Custom module: %w", err)
 			}
@@ -313,11 +313,11 @@ func (r *ModuleReconciler) newHelmService(
 	return NewHelmService(ctx, workspaceConn, r.Client)
 }
 
-func (r *ModuleReconciler) newKubernetesConfig(
+func (r *ModuleReconciler) newAPIConfig(
 	ctx context.Context,
 	workspaceConn *batchv1.WorkspaceConnection,
-) (*rest.Config, error) {
-	return NewKubernetesConfig(ctx, workspaceConn, r.Client)
+) (*clientcmdapi.Config, error) {
+	return NewAPIConfig(ctx, workspaceConn, r.Client)
 }
 
 func (r *ModuleReconciler) getWorkspace(

@@ -6,12 +6,12 @@ metadata:
 
 spec: {}
   # type: kubernetes
-  # hibernated: true
   # connection:
-  #   type: in-cluster
+  #   type: kubeconfig
   #   secretReference:
-  #     name: in-cluster
+  #     name: vcluster-kube
   #     namespace: default
+  # hibernated: false
   # autoHibernation:
   #   enabled: false
   #   schedule: "0 42 18 * * *"
