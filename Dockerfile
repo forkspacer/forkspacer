@@ -25,7 +25,7 @@ COPY pkg/ pkg/
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/forkspacer/forkspacer/pkg/constants/version.Version=${VERSION} \
     -X github.com/forkspacer/forkspacer/pkg/constants/version.GitCommit=${GIT_COMMIT} \
     -X github.com/forkspacer/forkspacer/pkg/constants/version.BuildDate=${BUILD_DATE}" \
@@ -34,9 +34,14 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
 RUN mkdir -p /internal-data && \
     chown -R 65532:65532 /internal-data
 
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM alpine:latest
+
+RUN apk add --no-cache git && \
+    addgroup -g 65532 nonroot && \
+    adduser -u 65532 -G nonroot -s /bin/sh -D nonroot
 
 WORKDIR /
+
 COPY --from=builder /workspace/manager .
 COPY --from=builder --chown=65532:65532 /internal-data /internal-data
 

@@ -85,7 +85,12 @@ func (r *ModuleReconciler) readModuleFromConfigMap(
 		return nil, fmt.Errorf("failed to fetch ConfigMap %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	data, ok := configMap.Data[kubernetesCons.ModuleConfigMapKeys.Source]
+	key := ref.Key
+	if key == "" {
+		key = kubernetesCons.ModuleConfigMapKeys.Source
+	}
+
+	data, ok := configMap.Data[key]
 	if !ok {
 		return nil, fmt.Errorf("key 'module.yaml' not found in ConfigMap %s/%s", ref.Namespace, ref.Name)
 	}

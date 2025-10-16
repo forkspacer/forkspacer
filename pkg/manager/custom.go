@@ -42,10 +42,6 @@ func NewModuleCustomManager(
 	config map[string]any,
 	metaData base.MetaData,
 ) (base.IManager, error) {
-	if err := customModule.Validate(); err != nil {
-		return nil, fmt.Errorf("failed to validate custom module: %w", err)
-	}
-
 	manager := &ModuleCustomManager{controllerClient}
 
 	podName := metaData.DecodeToString(managerCons.CustomMetaDataKeys.RunnerPodName)

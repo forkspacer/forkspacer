@@ -19,15 +19,19 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
+	"go.yaml.in/yaml/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
+	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
@@ -36,7 +40,10 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 
 	// Special case: adopt existing Helm release
 	if module.Spec.Source.ExistingHelmRelease != nil {
-		return r.adoptExistingHelmRelease(ctx, module)
+		if err := r.adoptExistingHelmRelease(ctx, module); err != nil {
+			return fmt.Errorf("failed to adopt existing Helm release: %w", err)
+		}
+		return nil
 	}
 
 	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
@@ -88,8 +95,9 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 	} else {
 		installErr := iManager.Install(ctx, metaData)
 
-		patch := client.MergeFrom(module.DeepCopy())
 		annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
+
+		patch := client.MergeFrom(module.DeepCopy())
 		utils.UpdateMap(&module.Annotations, annotations)
 		if err = r.Patch(ctx, module, patch); err != nil {
 			log.Error(err,
@@ -326,8 +334,6 @@ func (r *ModuleReconciler) resumeModule(ctx context.Context, module *batchv1.Mod
 }
 
 func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module *batchv1.Module) error {
-	log := logf.FromContext(ctx)
-
 	ref := module.Spec.Source.ExistingHelmRelease
 
 	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
@@ -358,65 +364,98 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return fmt.Errorf("failed to get release: %w", err)
 	}
 
-	log.Info("found existing Helm release",
-		"release", ref.Name,
-		"namespace", ref.Namespace,
-		"chart", release.Chart.Metadata.Name,
-		"version", release.Chart.Metadata.Version,
-	)
+	var chartSource resources.HelmModuleSpecChart
+	if ref.ChartSource.Repository != nil {
+		chartSource.Repo = &resources.HelmModuleSpecChartRepo{
+			URL:       ref.ChartSource.Repository.URL,
+			ChartName: ref.ChartSource.Repository.Chart,
+			Version:   ref.ChartSource.Repository.Version,
+		}
+	} else if ref.ChartSource.ConfigMap != nil {
+		chartSource.ConfigMap = &resources.ConfigMapIndetifier{
+			ResourceIndetifier: resources.ResourceIndetifier{
+				Name:      ref.ChartSource.ConfigMap.Name,
+				Namespace: ref.ChartSource.ConfigMap.Namespace,
+			},
+			Key: ref.ChartSource.ConfigMap.Key,
+		}
+	} else if ref.ChartSource.Git != nil {
+		chartSource.Git = &resources.HelmModuleSpecChartGit{
+			Repo:     ref.ChartSource.Git.Repo,
+			Path:     ref.ChartSource.Git.Path,
+			Revision: &ref.ChartSource.Git.Revision,
+		}
+
+		if ref.ChartSource.Git.Auth != nil {
+			chartSource.Git.Auth = &resources.HelmModuleSpecChartGitAuth{}
+
+			if ref.ChartSource.Git.Auth.HTTPSSecretRef != nil {
+				chartSource.Git.Auth.HTTPSSecretRef = &resources.ResourceIndetifier{
+					Name:      ref.ChartSource.Git.Auth.HTTPSSecretRef.Name,
+					Namespace: "",
+				}
+			} else {
+				return errors.New("unsupported Git chart authentication method, only HTTPSSecretRef is supported")
+			}
+		}
+	} else {
+		return errors.New("unsupported chart source type for existing Helm release")
+	}
+
+	helmResource := resources.HelmModule{
+		BaseResource: resources.BaseResource{
+			TypeMeta: resources.TypeMeta{
+				Kind: resources.KindHelmType,
+			},
+			ObjectMeta: resources.ObjectMeta{
+				Name:                     release.Name,
+				Version:                  fmt.Sprintf("%d", release.Version),
+				SupportedOperatorVersion: ">= 0.0.0",
+			},
+			Config: []resources.ConfigItem{},
+		},
+		Spec: resources.HelmModuleSpec{
+			Namespace: release.Namespace,
+			Chart:     chartSource,
+			Values: []resources.HelmValues{
+				{
+					Raw: release.Config,
+				},
+			},
+		},
+	}
+
+	// helmResourceJSON, err := json.Marshal(helmResource)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to marshal Helm resource to JSON: %w", err)
+	// }
+
+	// module.Spec.Source = batchv1.ModuleSource{
+	// 	Raw: &runtime.RawExtension{Raw: helmResourceJSON},
+	// }
+	// if err := r.Update(ctx, module); err != nil {
+	// 	return err
+	// }
+
+	helmResourceYAML, err := yaml.Marshal(helmResource)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Helm resource to YAML: %w", err)
+	}
+
+	metaData := managerBase.MetaData{
+		managerCons.HelmMetaDataKeys.ReleaseName: release.Name,
+	}
 
 	annotations := map[string]string{
-		"forkspacer.com/adopted-release":   "true",
-		"forkspacer.com/release-name":      ref.Name,
-		"forkspacer.com/release-namespace": ref.Namespace,
-		"forkspacer.com/original-chart":    release.Chart.Metadata.Name,
-		"forkspacer.com/original-version":  release.Chart.Metadata.Version,
-	}
-
-	// Get the rendered manifests (needed for both modes)
-	manifest := release.Manifest
-	if manifest == "" {
-		return fmt.Errorf("release manifest is empty")
-	}
-
-	// Store manifests for sleep/resume operations (needed in both modes)
-	annotations[kubernetesCons.ModuleAnnotationKeys.Resource] = manifest
-
-	// Store values for reference
-	valuesJSON, err := json.Marshal(release.Config)
-	if err != nil {
-		log.Error(err, "failed to marshal release values, continuing without them")
-	} else {
-		annotations["forkspacer.com/original-values"] = string(valuesJSON)
-	}
-
-	// Store chart source for future upgrade operations
-	chartSourceJSON, err := json.Marshal(ref.ChartSource)
-	if err != nil {
-		return fmt.Errorf("failed to marshal chart source: %w", err)
-	}
-
-	annotations["forkspacer.com/chart-source"] = string(chartSourceJSON)
-
-	// Store config if provided
-	if module.Spec.Config != nil && module.Spec.Config.Raw != nil {
-		annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
+		kubernetesCons.ModuleAnnotationKeys.Resource:    string(helmResourceYAML),
+		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, annotations)
-	if err := r.Patch(ctx, module, patch); err != nil {
-		log.Error(err,
-			"failed to patch module with adoption annotations",
-			"module", module.Name, "namespace", module.Namespace,
-		)
-		return err
+	if err = r.Patch(ctx, module, patch); err != nil {
+		return fmt.Errorf("failed to patch module with adoption annotations: %w", err)
 	}
 
-	log.Info("successfully adopted existing Helm release",
-		"release", ref.Name,
-		"namespace", ref.Namespace,
-		"chart", release.Chart.Metadata.Name,
-	)
 	return nil
 }

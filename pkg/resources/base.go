@@ -3,17 +3,9 @@ package resources
 import "fmt"
 
 type ObjectMeta struct {
-	Name                     string  `yaml:"name"`
-	Version                  string  `yaml:"version"`
-	SupportedOperatorVersion string  `yaml:"supportedOperatorVersion"`
-	Author                   *string `yaml:"author"`
-	Description              *string `yaml:"description"`
-	Category                 *string `yaml:"category"`
-	Image                    *string `yaml:"image"`
-	ResourceUsage            struct {
-		CPU    string `yaml:"cpu"`
-		Memory string `yaml:"memory"`
-	} `yaml:"resource_usage"`
+	Name                     string `yaml:"name" json:"name"`
+	Version                  string `yaml:"version" json:"version"`
+	SupportedOperatorVersion string `yaml:"supportedOperatorVersion" json:"supportedOperatorVersion"`
 }
 
 type KindType string
@@ -24,12 +16,36 @@ var (
 )
 
 type TypeMeta struct {
-	Kind KindType `yaml:"kind"`
+	Kind KindType `yaml:"kind" json:"kind"`
 }
 
 type ResourceIndetifier struct {
-	Name      string `yaml:"name"`
-	Namespace string `yaml:"namespace"`
+	Name      string `yaml:"name" json:"name"`
+	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+type ConfigMapIndetifier struct {
+	ResourceIndetifier `yaml:",inline" json:",inline"`
+	Key                string `yaml:"key" json:"key"`
+}
+
+func (resource ConfigMapIndetifier) Validate() error {
+	if err := resource.ResourceIndetifier.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+type SecretIndetifier struct {
+	ResourceIndetifier `yaml:",inline" json:",inline"`
+	Key                string `yaml:"key" json:"key"`
+}
+
+func (resource SecretIndetifier) Validate() error {
+	if err := resource.ResourceIndetifier.Validate(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (resource ResourceIndetifier) Validate() error {
@@ -48,9 +64,9 @@ type Resource interface {
 }
 
 type BaseResource struct {
-	TypeMeta   `yaml:",inline"`
-	ObjectMeta ObjectMeta   `yaml:"metadata"`
-	Config     []ConfigItem `yaml:"config"`
+	TypeMeta   `yaml:",inline" json:",inline"`
+	ObjectMeta ObjectMeta   `yaml:"metadata" json:"metadata"`
+	Config     []ConfigItem `yaml:"config" json:"config"`
 }
 
 func (resource BaseResource) GetKind() KindType {

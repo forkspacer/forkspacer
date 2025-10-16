@@ -5,83 +5,101 @@ metadata:
   namespace: default
 spec:
   source:
-    raw:
-      kind: Helm
-      metadata:
-        name: redis
-        supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
+    # raw:
+    #   kind: Helm
+    #   metadata:
+    #     name: redis
+    #     supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
 
-      config:
-        - type: option
-          name: "Redis Version"
-          alias: "version"
-          spec:
-            editable: true
-            required: false
-            default: "21.2.9"
-            values:
-              - "21.2.9"
-              - "21.2.7"
-              - "21.2.6"
+    #   config:
+    #     - type: option
+    #       name: "Redis Version"
+    #       alias: "version"
+    #       spec:
+    #         editable: true
+    #         required: false
+    #         default: "21.2.9"
+    #         values:
+    #           - "21.2.9"
+    #           - "21.2.7"
+    #           - "21.2.6"
 
-        - type: integer
-          name: "Replica Count"
-          alias: "replicaCount"
-          spec:
-            editable: true
-            required: false
-            default: 1
-            min: 0
-            max: 5
+    #     - type: integer
+    #       name: "Replica Count"
+    #       alias: "replicaCount"
+    #       spec:
+    #         editable: true
+    #         required: false
+    #         default: 1
+    #         min: 0
+    #         max: 5
 
-      spec:
-        namespace: default
-        repo: https://charts.bitnami.com/bitnami
-        chartName: redis
-        version: "{{.config.version}}"
+    #   spec:
+    #     namespace: alma
+    #     chart:
+    #       # repo:
+    #       #   url: https://charts.bitnami.com/bitnami
+    #       #   chartName: redis
+    #       #   version: "{{.config.version}}"
+    #       # configMap:
+    #       #   name: chart
+    #       # git:
+    #       #   repo: https://github.com/aykhans/test-chart
+    #       #   path: "/"
+    #       #   revision: main
+    #       #   auth:
+    #       #     httpsSecretRef:
+    #       #       name: git
 
-        values:
-          - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
-          - raw:
-              replica:
-                replicaCount: 0
-              image:
-                repository: bitnamilegacy/redis
-              global:
-                security:
-                  allowInsecureImages: true
+    #     values:
+    #       - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
+    #       - raw:
+    #           replica:
+    #             replicaCount: 0
+    #           image:
+    #             repository: bitnamilegacy/redis
+    #           global:
+    #             security:
+    #               allowInsecureImages: true
 
-        outputs:
-          - name: "Redis Hostname"
-            value: "redis-master.default"
-          - name: "Redis Username"
-            value: "default"
-          - name: "Redis Password"
-            valueFrom:
-              secret:
-                name: "{{.releaseName}}"
-                key: redis-password
-                namespace: default
-          - name: "Redis Port"
-            value: 6379
+    #     # outputs:
+    #     #   - name: "Redis Hostname"
+    #     #     value: "redis-master.default"
+    #     #   - name: "Redis Username"
+    #     #     value: "default"
+    #     #   - name: "Redis Password"
+    #     #     valueFrom:
+    #     #       secret:
+    #     #         name: "{{.releaseName}}"
+    #     #         key: redis-password
+    #     #         namespace: default
+    #     #   - name: "Redis Port"
+    #     #     value: 6379
 
-        cleanup:
-          removeNamespace: false
-          removePVCs: true
+    #     cleanup:
+    #       removeNamespace: true
+    #       removePVCs: true
 
-        migration:
-          pvc:
-            enabled: true
-            names:
-              - "redis-data-{{.releaseName}}-master-0"
-          configMap:
-            enabled: false
-            names:
-              - ""
-          secret:
-            enabled: true
-            names:
-              - "{{.releaseName}}"
+    #     migration:
+    #       pvc:
+    #         enabled: true
+    #         names:
+    #           - "redis-data-{{.releaseName}}-master-0"
+    #       configMap:
+    #         enabled: false
+    #         names:
+    #           - ""
+    #       secret:
+    #         enabled: false
+    #         names:
+    #           - "{{.releaseName}}"
+    existingHelmRelease:
+      name: redis
+      chartSource:
+        repository:
+          url: https://charts.bitnami.com/bitnami
+          chart: redis
+          version: "21.2.9"
 
   workspace:
     name: default

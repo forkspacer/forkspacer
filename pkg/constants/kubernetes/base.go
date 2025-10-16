@@ -23,17 +23,21 @@ var WorkspaceSecretKeys = struct {
 }
 
 var ModuleConfigMapKeys = struct {
-	Source,
-	CustomPlugin string
+	Source string
 }{
-	Source:       "module.yaml",
-	CustomPlugin: "plugin",
+	Source: "module.yaml",
 }
 
 var Helm = struct {
 	DefaultNamespace,
-	ValuesConfigMapKey string
+	ValuesConfigMapKey,
+	ChartConfigMapKey,
+	ChartGitAuthHTTPSSecretUsernameKey,
+	ChartGitAuthHTTPSSecretTokenKey string
 }{
-	DefaultNamespace:   "default",
-	ValuesConfigMapKey: "values",
+	DefaultNamespace:                   "default",
+	ValuesConfigMapKey:                 "values",
+	ChartConfigMapKey:                  "chart.tgz",
+	ChartGitAuthHTTPSSecretUsernameKey: "username",
+	ChartGitAuthHTTPSSecretTokenKey:    "token",
 }

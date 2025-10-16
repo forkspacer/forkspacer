@@ -51,6 +51,10 @@ func HandleResource(
 			return fmt.Errorf("failed to read Helm manager details: %v", err)
 		}
 
+		if err := helmModule.Validate(); err != nil {
+			return err
+		}
+
 		return handleHelmModule(*helmModule)
 	case KindCustomType:
 		if handleCustomModule == nil {
@@ -60,6 +64,10 @@ func HandleResource(
 		customModule, err := ReadResource[CustomModule](resourceData)
 		if err != nil {
 			return fmt.Errorf("failed to read base bundle information: %v", err)
+		}
+
+		if err := customModule.Validate(); err != nil {
+			return err
 		}
 
 		return handleCustomModule(*customModule)
