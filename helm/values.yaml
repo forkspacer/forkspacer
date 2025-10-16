@@ -17,7 +17,7 @@ controllerManager:
   container:
     image:
       repository: ghcr.io/forkspacer/forkspacer
-      tag: v0.1.9
+      tag: v0.1.10
     imagePullPolicy: IfNotPresent
     args:
       - "--leader-elect"
