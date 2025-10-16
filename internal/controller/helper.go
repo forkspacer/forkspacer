@@ -56,7 +56,19 @@ func NewKubernetesConfig(
 				workspaceConn.SecretReference.Namespace, workspaceConn.SecretReference.Name, err)
 		}
 
-		clientConfig, _ := clientcmd.NewClientConfigFromBytes(secret.Data[kubernetesCons.WorkspaceSecretKeys.KubeConfig])
+		// Use custom key if provided, otherwise use default "kubeconfig"
+		secretKey := workspaceConn.SecretReference.Key
+		if secretKey == "" {
+			secretKey = kubernetesCons.WorkspaceSecretKeys.KubeConfig
+		}
+
+		kubeconfigData, exists := secret.Data[secretKey]
+		if !exists {
+			return nil, fmt.Errorf("secret %s/%s does not contain key %q",
+				workspaceConn.SecretReference.Namespace, workspaceConn.SecretReference.Name, secretKey)
+		}
+
+		clientConfig, _ := clientcmd.NewClientConfigFromBytes(kubeconfigData)
 		config, err = clientConfig.ClientConfig()
 		if err != nil {
 			return nil, err

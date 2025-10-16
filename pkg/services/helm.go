@@ -541,20 +541,20 @@ func (service HelmService) GetRelease(releaseName, namespace string) (*release.R
 
 // GetReleaseManifest retrieves the rendered manifest of a Helm release
 func (service HelmService) GetReleaseManifest(releaseName, namespace string) (string, error) {
-	release, err := service.GetRelease(releaseName, namespace)
+	rel, err := service.GetRelease(releaseName, namespace)
 	if err != nil {
 		return "", err
 	}
 
-	return release.Manifest, nil
+	return rel.Manifest, nil
 }
 
 // GetReleaseValues retrieves the values used for a Helm release
-func (service HelmService) GetReleaseValues(releaseName, namespace string) (map[string]interface{}, error) {
-	release, err := service.GetRelease(releaseName, namespace)
+func (service HelmService) GetReleaseValues(releaseName, namespace string) (map[string]any, error) {
+	rel, err := service.GetRelease(releaseName, namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	return release.Config, nil
+	return rel.Config, nil
 }

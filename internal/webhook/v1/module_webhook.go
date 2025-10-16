@@ -254,7 +254,11 @@ func validateModuleSource(
 		// ExistingHelmRelease is now supported - no validation needed
 		return nil
 	} else {
-		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'configMap', 'httpURL', or 'existingHelmRelease' must be specified")
+		return field.Invalid(
+			fldPath,
+			moduleSource,
+			"exactly one of 'raw', 'configMap', 'httpURL', or 'existingHelmRelease' must be specified",
+		)
 	}
 }
 

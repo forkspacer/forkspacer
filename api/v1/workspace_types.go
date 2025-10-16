@@ -56,6 +56,12 @@ type WorkspaceConnectionSecretReference struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
+
+	// Key in the secret to retrieve. Defaults to "kubeconfig"
+	// +optional
+	// +kubebuilder:default=kubeconfig
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key,omitempty"`
 }
 
 type WorkspaceConnection struct {

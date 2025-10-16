@@ -335,11 +335,18 @@ func validateWorkspaceKubeconfigInSecret(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
-	kubeconfigData, exists := secret.Data[kubernetesCons.WorkspaceSecretKeys.KubeConfig]
+	// Use custom key if provided, otherwise use default "kubeconfig"
+	secretKey := secretReference.Key
+	if secretKey == "" {
+		secretKey = kubernetesCons.WorkspaceSecretKeys.KubeConfig
+	}
+
+	kubeconfigData, exists := secret.Data[secretKey]
 	if !exists {
 		allErrs = append(allErrs, field.Required(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
-			fmt.Sprintf("secret %s/%s must contain a 'kubeconfig' field", secretReference.Namespace, secretReference.Name),
+			fmt.Sprintf("secret %s/%s must contain a %q field",
+				secretReference.Namespace, secretReference.Name, secretKey),
 		))
 		return allErrs
 	}
@@ -348,7 +355,8 @@ func validateWorkspaceKubeconfigInSecret(
 		allErrs = append(allErrs, field.Invalid(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
 			secretReference,
-			fmt.Sprintf("kubeconfig field in secret %s/%s cannot be empty", secretReference.Namespace, secretReference.Name),
+			fmt.Sprintf("%q field in secret %s/%s cannot be empty",
+				secretKey, secretReference.Namespace, secretReference.Name),
 		))
 		return allErrs
 	}
@@ -359,8 +367,8 @@ func validateWorkspaceKubeconfigInSecret(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
 			secretReference,
 			fmt.Sprintf(
-				"kubeconfig field in secret %s/%s is not a valid kubeconfig: %v",
-				secretReference.Namespace, secretReference.Name, err,
+				"%q field in secret %s/%s is not a valid kubeconfig: %v",
+				secretKey, secretReference.Namespace, secretReference.Name, err,
 			),
 		))
 	}
