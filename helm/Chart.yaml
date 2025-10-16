@@ -21,6 +21,6 @@ dependencies:
     repository: "https://forkspacer.github.io/api-server"
     condition: api-server.enabled
   - name: operator-ui
-    version: "0.1.2"
+    version: "0.1.4"
     repository: "https://forkspacer.github.io/operator-ui"
     condition: operator-ui.enabled
