@@ -391,6 +391,11 @@ spec:
                 properties:
                   secretReference:
                     properties:
+                      key:
+                        default: kubeconfig
+                        description: Key in the secret to retrieve. Defaults to "kubeconfig"
+                        minLength: 1
+                        type: string
                       name:
                         maxLength: 253
                         minLength: 1
@@ -902,7 +907,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.10
+        image: ghcr.io/forkspacer/forkspacer:v0.1.11
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
