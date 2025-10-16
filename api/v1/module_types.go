@@ -59,11 +59,10 @@ type ModuleSourceExistingHelmReleaseRef struct {
 	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
 
-	// ChartSource is optional. If provided, the release will be managed using this chart source
-	// for future operations (upgrades, reconfigurations). If not provided, the release will be
-	// adopted in snapshot mode using the current rendered manifests.
-	// +optional
-	ChartSource *ModuleSourceChartRef `json:"chartSource,omitempty"`
+	// ChartSource defines the Helm chart source for managing this release.
+	// Required for installation and future operations (upgrades, reconfigurations).
+	// +required
+	ChartSource *ModuleSourceChartRef `json:"chartSource"`
 }
 
 // ModuleSourceChartRef defines a reference to a Helm chart source
@@ -77,6 +76,10 @@ type ModuleSourceChartRef struct {
 	// Repository-based chart (e.g., from Helm repository)
 	// +optional
 	Repository *ModuleSourceChartRepository `json:"repository,omitempty"`
+
+	// Git repository containing Helm chart
+	// +optional
+	Git *ModuleSourceChartGit `json:"git,omitempty"`
 }
 
 // ModuleSourceChartRepository defines a chart from a Helm repository
@@ -91,6 +94,37 @@ type ModuleSourceChartRepository struct {
 
 	// +optional
 	Version string `json:"version,omitempty"`
+}
+
+// ModuleSourceChartGit defines a chart from a Git repository
+type ModuleSourceChartGit struct {
+	// Repository URL (https or ssh)
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Repo string `json:"repo"`
+
+	// Path to the chart directory containing Chart.yaml
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Path string `json:"path"`
+
+	// Git revision (branch, tag, or commit SHA)
+	// +kubebuilder:default=main
+	// +optional
+	Revision string `json:"revision,omitempty"`
+
+	// Authentication credentials for private repositories
+	// +optional
+	Auth *ModuleSourceChartGitAuth `json:"auth,omitempty"`
+}
+
+// ModuleSourceChartGitAuth defines authentication for Git repositories
+type ModuleSourceChartGitAuth struct {
+	// Reference to a Secret containing Git credentials
+	// For HTTPS: username and password/token fields
+	// For SSH: sshPrivateKey field
+	// +required
+	SecretRef ModuleSourceConfigMapRef `json:"secretRef"`
 }
 
 type ModuleSource struct {

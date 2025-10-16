@@ -110,10 +110,8 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	// Skip uninstallation for adopted releases - just detach
 	if module.Annotations != nil && module.Annotations["forkspacer.com/adopted-release"] == "true" {
-		adoptionMode := module.Annotations["forkspacer.com/adoption-mode"]
 		log.Info("skipping uninstall for adopted Helm release - only detaching from module",
 			"release", module.Annotations["forkspacer.com/release-name"],
-			"mode", adoptionMode,
 		)
 		return nil
 	}
@@ -140,6 +138,13 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 	if resourceAnnotation == "" {
+		// If module is in Failed state and has no resource annotation, it means
+		// installation never completed, so there's nothing to uninstall
+		if module.Status.Phase == batchv1.ModulePhaseFailed {
+			log.Info("skipping uninstall for failed module with no resource annotation - nothing was installed",
+				"module", module.Name, "namespace", module.Namespace)
+			return nil
+		}
 		return fmt.Errorf("resource definition not found in module annotations for %s/%s", module.Namespace, module.Name)
 	}
 	moduleData := []byte(resourceAnnotation)
@@ -385,27 +390,17 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		annotations["forkspacer.com/original-values"] = string(valuesJSON)
 	}
 
-	// Determine adoption mode based on chartSource presence
-	if ref.ChartSource != nil {
-		// Managed mode: store chart source for future upgrade operations
-		log.Info("adopting in managed mode with chart source")
+	// Store chart source for future upgrade operations
+	chartSourceJSON, err := json.Marshal(ref.ChartSource)
+	if err != nil {
+		return fmt.Errorf("failed to marshal chart source: %w", err)
+	}
 
-		chartSourceJSON, err := json.Marshal(ref.ChartSource)
-		if err != nil {
-			return fmt.Errorf("failed to marshal chart source: %w", err)
-		}
+	annotations["forkspacer.com/chart-source"] = string(chartSourceJSON)
 
-		annotations["forkspacer.com/adoption-mode"] = "managed"
-		annotations["forkspacer.com/chart-source"] = string(chartSourceJSON)
-
-		// Store config if provided
-		if module.Spec.Config != nil && module.Spec.Config.Raw != nil {
-			annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
-		}
-	} else {
-		// Snapshot mode: no chart source available
-		log.Info("adopting in snapshot mode (no chart source provided)")
-		annotations["forkspacer.com/adoption-mode"] = "snapshot"
+	// Store config if provided
+	if module.Spec.Config != nil && module.Spec.Config.Raw != nil {
+		annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())
@@ -421,7 +416,7 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 	log.Info("successfully adopted existing Helm release",
 		"release", ref.Name,
 		"namespace", ref.Namespace,
-		"mode", annotations["forkspacer.com/adoption-mode"],
+		"chart", release.Chart.Metadata.Name,
 	)
 	return nil
 }

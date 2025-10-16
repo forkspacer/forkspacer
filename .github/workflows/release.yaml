@@ -32,7 +32,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract release tag
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "CHART_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
 
       - name: Build and push image via Makefile
         run: |
@@ -44,3 +46,15 @@ jobs:
         run: |
           docker tag ${IMAGE_REPO}:${VERSION} ${IMAGE_REPO}:latest
           docker push ${IMAGE_REPO}:latest
+
+      - name: Trigger dependency update workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+          event-type: dependency-update
+          client-payload: |
+            {
+              "component": "forkspacer",
+              "version": "${{ env.VERSION }}",
+              "chart_version": "${{ env.CHART_VERSION }}"
+            }

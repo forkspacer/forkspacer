@@ -1,5 +1,5 @@
 # Version info
-VERSION ?= v0.1.5
+VERSION ?= v0.1.10
 GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -80,7 +80,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER_TEST ?= operator-test-e2e
+KIND_CLUSTER_TEST ?= forkspacer-test-e2e
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -123,29 +123,11 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
-.PHONY: build-plugin
-build-plugin: ## Build a plugin using Docker. Usage: make build-plugin PLUGIN=test
-	@if [ -z "$(PLUGIN)" ]; then \
-		echo "Error: PLUGIN variable not set. Usage: make build-plugin PLUGIN=<plugin_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f "plugins/$(PLUGIN)/main.go" ]; then \
-		echo "Error: Plugin source file plugins/$(PLUGIN)/main.go not found"; \
-		exit 1; \
-	fi
-	@echo "Building plugin '$(PLUGIN)' in Docker container..."
-	$(CONTAINER_TOOL) build -f plugins/Dockerfile --build-arg PLUGIN=$(PLUGIN) -t plugin-builder-$(PLUGIN) .
-	@container_id=$$($(CONTAINER_TOOL) create plugin-builder-$(PLUGIN)); \
-	$(CONTAINER_TOOL) cp "$$container_id:/output/plugin.so" plugins/$(PLUGIN)/plugin.so; \
-	$(CONTAINER_TOOL) rm "$$container_id"
-	@echo "Plugin built successfully: plugins/$(PLUGIN)/plugin.so"
-	@echo "Plugin size: $$(du -h plugins/$(PLUGIN)/plugin.so | cut -f1)"
-
 .PHONY: dev-host
 dev-host: manifests generate fmt vet ## Run a controller from your host.
 	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
 
-KIND_CLUSTER_DEV ?= operator-dev
+KIND_CLUSTER_DEV ?= forkspacer-dev
 
 .PHONY: dev-kind
 dev-kind: manifests generate fmt vet ## Run a controller in a kind cluster.
@@ -220,6 +202,8 @@ helm-package: helm-sync ## Package Helm chart with current manifests
 
 .PHONY: helm-package-ci
 helm-package-ci: helm-sync ## Package Helm chart from helm directory
+	@echo "📦 Updating dependencies from external repositories..."
+	helm dependency update helm/
 	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
 	echo "📦 Packaging Helm chart version $$CHART_VERSION..."; \
 	helm package helm/
@@ -375,6 +359,51 @@ update-versions: ## Update multiple versions. Usage: make update-versions FORKSP
 		exit 1; \
 	fi
 	@echo "🎉 Version update complete!"
+
+.PHONY: update-dependency
+update-dependency: ## Update specific dependency version. Usage: make update-dependency COMPONENT=api-server VERSION=v1.0.1 CHART_VERSION=1.0.1
+	@if [ -z "$(COMPONENT)" ] || [ -z "$(VERSION)" ] || [ -z "$(CHART_VERSION)" ]; then \
+		echo "❌ Error: Missing parameters. Usage: make update-dependency COMPONENT=api-server VERSION=v1.0.1 CHART_VERSION=1.0.1"; \
+		exit 1; \
+	fi
+	@echo "🔄 Updating $(COMPONENT) to version $(VERSION) (chart: $(CHART_VERSION))"
+	@if [ "$(COMPONENT)" = "api-server" ]; then \
+		sed -i.bak "/apiServer:/,/pullPolicy:/ s/tag: [v]*[0-9]\+\.[0-9]\+\.[0-9]\+/tag: $(VERSION)/" helm/values.yaml; \
+		sed -i.bak "/name: api-server/,/condition:/ s/version: \"[^\"]*\"/version: \"$(CHART_VERSION)\"/" helm/Chart.yaml; \
+		rm -f helm/values.yaml.bak helm/Chart.yaml.bak; \
+	elif [ "$(COMPONENT)" = "operator-ui" ]; then \
+		sed -i.bak "/operatorUI:/,/pullPolicy:/ s/tag: [v]*[0-9]\+\.[0-9]\+\.[0-9]\+/tag: $(VERSION)/" helm/values.yaml; \
+		sed -i.bak "/name: operator-ui/,/condition:/ s/version: \"[^\"]*\"/version: \"$(CHART_VERSION)\"/" helm/Chart.yaml; \
+		rm -f helm/values.yaml.bak helm/Chart.yaml.bak; \
+	else \
+		echo "❌ Error: Unknown component '$(COMPONENT)'. Supported: api-server, operator-ui"; \
+		exit 1; \
+	fi
+	@echo "✅ Updated $(COMPONENT) dependency version to $(CHART_VERSION) and image tag to $(VERSION)"
+
+.PHONY: dependency-summary
+dependency-summary: ## Generate GitHub Actions summary for dependency update. Usage: make dependency-summary COMPONENT=api-server VERSION=v1.0.1 CHART_VERSION=1.0.1
+	@if [ -z "$(COMPONENT)" ] || [ -z "$(VERSION)" ] || [ -z "$(CHART_VERSION)" ]; then \
+		echo "❌ Error: Missing parameters. Usage: make dependency-summary COMPONENT=api-server VERSION=v1.0.1 CHART_VERSION=1.0.1"; \
+		exit 1; \
+	fi
+	@SUMMARY_FILE=$${GITHUB_STEP_SUMMARY:-/tmp/summary.md}; \
+	if [ "$(COMPONENT)" = "forkspacer" ]; then \
+		echo "## 🎉 Main Chart Version Update Complete" >> $$SUMMARY_FILE; \
+	else \
+		echo "## 🎉 Dependency Update Complete" >> $$SUMMARY_FILE; \
+	fi; \
+	echo "- **Component**: $(COMPONENT)" >> $$SUMMARY_FILE; \
+	echo "- **Version**: $(VERSION)" >> $$SUMMARY_FILE; \
+	echo "- **Chart Version**: $(CHART_VERSION)" >> $$SUMMARY_FILE; \
+	echo "- **Action**: Pull request created for review" >> $$SUMMARY_FILE; \
+	echo "✅ Summary written to $$SUMMARY_FILE"
+
+.PHONY: update-helm-dependencies
+update-helm-dependencies: ## Update Helm chart dependencies from repositories
+	@echo "📦 Updating Helm dependencies..."
+	@helm dependency update helm/
+	@echo "✅ Helm dependencies updated"
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:

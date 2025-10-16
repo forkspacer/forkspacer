@@ -11,9 +11,9 @@ spec:
     name: default
     # namespace: default
   # connection:
-  #   type: in-cluster
+  #   type: kubeconfig
   #   secretReference:
-  #     name: kind-secret
+  #     name: vcluster-kube
   # autoHibernation:
   #   enabled: false
   #   schedule: "0 42 18 * * *"

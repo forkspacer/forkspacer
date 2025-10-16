@@ -2,8 +2,8 @@ apiVersion: v2
 name: forkspacer
 description: A Kubernetes operator for dynamic workspace lifecycle management
 type: application
-version: 0.1.5
-appVersion: "v0.1.5"
+version: 0.1.10
+appVersion: "v0.1.10"
 keywords:
   - operator
   - workspace
@@ -17,10 +17,10 @@ maintainers:
     email: team@forkspacer.com
 dependencies:
   - name: api-server
-    version: "1.0.0"
-    repository: "file://./charts/api-server"
-    condition: apiServer.enabled
+    version: "0.1.2"
+    repository: "https://forkspacer.github.io/api-server"
+    condition: api-server.enabled
   - name: operator-ui
-    version: "0.1.1"
-    repository: "file://./charts/operator-ui"
-    condition: operatorUI.enabled
+    version: "0.1.2"
+    repository: "https://forkspacer.github.io/operator-ui"
+    condition: operator-ui.enabled

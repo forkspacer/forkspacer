@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
@@ -17,32 +17,83 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func NewKubernetesConfig(
+func NewAPIConfig(
 	ctx context.Context,
 	workspaceConn *batchv1.WorkspaceConnection,
 	controllerClient client.Client,
-) (*rest.Config, error) {
+) (*clientcmdapi.Config, error) {
 	var (
-		config *rest.Config
+		config *clientcmdapi.Config
 		err    error
 	)
 
 	switch workspaceConn.Type {
 	case batchv1.WorkspaceConnectionTypeInCluster:
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
+		// Initialize the config object and its maps before populating them
+		config = &clientcmdapi.Config{
+			Clusters:  make(map[string]*clientcmdapi.Cluster),
+			AuthInfos: make(map[string]*clientcmdapi.AuthInfo),
+			Contexts:  make(map[string]*clientcmdapi.Context),
 		}
 
-	case batchv1.WorkspaceConnectionTypeLocal:
-		config, err = clientcmd.BuildConfigFromFlags("", filepath.Join(homedir.HomeDir(), ".kube", "config"))
+		restConfig, err := rest.InClusterConfig()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get in-cluster REST config: %w", err)
+		}
+
+		// Handle CA certificate
+		cluster := &clientcmdapi.Cluster{
+			Server: restConfig.Host,
+		}
+		if len(restConfig.CAData) > 0 {
+			cluster.CertificateAuthorityData = restConfig.CAData
+		} else if restConfig.CAFile != "" {
+			cluster.CertificateAuthority = restConfig.CAFile
+		}
+		if restConfig.Insecure {
+			cluster.InsecureSkipTLSVerify = true
+		}
+		config.Clusters["default-cluster"] = cluster
+
+		// Handle authentication
+		authInfo := &clientcmdapi.AuthInfo{}
+		if restConfig.BearerToken != "" {
+			authInfo.Token = restConfig.BearerToken
+		} else if restConfig.BearerTokenFile != "" {
+			// Read token from file
+			token, err := os.ReadFile(restConfig.BearerTokenFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read bearer token file %s: %w", restConfig.BearerTokenFile, err)
+			}
+			authInfo.Token = string(token)
+		}
+		// Handle client certificates if present
+		if len(restConfig.CertData) > 0 {
+			authInfo.ClientCertificateData = restConfig.CertData
+		} else if restConfig.CertFile != "" {
+			authInfo.ClientCertificate = restConfig.CertFile
+		}
+		if len(restConfig.KeyData) > 0 {
+			authInfo.ClientKeyData = restConfig.KeyData
+		} else if restConfig.KeyFile != "" {
+			authInfo.ClientKey = restConfig.KeyFile
+		}
+		config.AuthInfos["default-user"] = authInfo
+
+		config.Contexts["default-context"] = &clientcmdapi.Context{
+			Cluster:  "default-cluster",
+			AuthInfo: "default-user",
+		}
+		config.CurrentContext = "default-context"
+
+	case batchv1.WorkspaceConnectionTypeLocal:
+		config, err = clientcmd.LoadFromFile(clientcmd.RecommendedHomeFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load local kubeconfig from %s: %w", clientcmd.RecommendedHomeFile, err)
 		}
 
 	case batchv1.WorkspaceConnectionTypeKubeconfig:
@@ -62,16 +113,19 @@ func NewKubernetesConfig(
 			secretKey = kubernetesCons.WorkspaceSecretKeys.KubeConfig
 		}
 
-		kubeconfigData, exists := secret.Data[secretKey]
-		if !exists {
-			return nil, fmt.Errorf("secret %s/%s does not contain key %q",
-				workspaceConn.SecretReference.Namespace, workspaceConn.SecretReference.Name, secretKey)
+		kubeconfigData, ok := secret.Data[secretKey]
+		if !ok {
+			return nil, fmt.Errorf(
+				"secret %s/%s does not contain key %s",
+				workspaceConn.SecretReference.Namespace,
+				workspaceConn.SecretReference.Name,
+				secretKey,
+			)
 		}
 
-		clientConfig, _ := clientcmd.NewClientConfigFromBytes(kubeconfigData)
-		config, err = clientConfig.ClientConfig()
+		config, err = clientcmd.Load(kubeconfigData)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to load kubeconfig from secret data: %w", err)
 		}
 
 	default:
@@ -81,19 +135,37 @@ func NewKubernetesConfig(
 	return config, nil
 }
 
+func NewRESTConfig(
+	ctx context.Context,
+	workspaceConn *batchv1.WorkspaceConnection,
+	controllerClient client.Client,
+) (*rest.Config, error) {
+	apiConfig, err := NewAPIConfig(ctx, workspaceConn, controllerClient)
+	if err != nil {
+		return nil, err
+	}
+
+	restConfig, err := clientcmd.NewDefaultClientConfig(*apiConfig, &clientcmd.ConfigOverrides{}).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return restConfig, nil
+}
+
 func NewHelmService(
 	ctx context.Context,
 	workspaceConn *batchv1.WorkspaceConnection,
 	controllerClient client.Client,
 ) (*services.HelmService, error) {
-	kubernetesConfig, err := NewKubernetesConfig(ctx, workspaceConn, controllerClient)
+	restConfig, err := NewRESTConfig(ctx, workspaceConn, controllerClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
+		return nil, fmt.Errorf("failed to create Kubernetes REST client: %w", err)
 	}
 
 	log := logf.FromContext(ctx, "HELM", batchv1.WorkspaceConnectionTypeLocal+"/"+batchv1.WorkspaceConnectionTypeInCluster)
 	helmService, err := services.NewHelmService(
-		kubernetesConfig,
+		restConfig,
 		func(format string, v ...any) {
 			log.V(1).Info(fmt.Sprintf(format, v))
 		},
@@ -107,93 +179,6 @@ func NewHelmService(
 
 func newHelmReleaseNameFromModule(module batchv1.Module) string {
 	return module.Namespace + "-" + module.Name
-}
-
-// ConvertRestConfigToAPIConfig converts a *rest.Config to an api.Config (kubeconfig format)
-func ConvertRestConfigToAPIConfig(
-	restConfig *rest.Config,
-	contextName, clusterName, userName string,
-) *clientcmdapi.Config {
-	if contextName == "" {
-		contextName = "default"
-	}
-	if clusterName == "" {
-		clusterName = "default"
-	}
-	if userName == "" {
-		userName = "default"
-	}
-
-	// Create the cluster configuration
-	cluster := &clientcmdapi.Cluster{
-		Server:                   restConfig.Host,
-		CertificateAuthorityData: restConfig.CAData,
-		CertificateAuthority:     restConfig.CAFile,
-		InsecureSkipTLSVerify:    restConfig.Insecure,
-		TLSServerName:            restConfig.ServerName,
-	}
-
-	// Create the auth info (user credentials)
-	authInfo := &clientcmdapi.AuthInfo{
-		ClientCertificateData: restConfig.CertData,
-		ClientCertificate:     restConfig.CertFile,
-		ClientKeyData:         restConfig.KeyData,
-		ClientKey:             restConfig.KeyFile,
-		Token:                 restConfig.BearerToken,
-		TokenFile:             restConfig.BearerTokenFile,
-		Impersonate:           restConfig.Impersonate.UserName,
-		ImpersonateGroups:     restConfig.Impersonate.Groups,
-		ImpersonateUserExtra:  restConfig.Impersonate.Extra,
-		Username:              restConfig.Username,
-		Password:              restConfig.Password,
-	}
-
-	// Handle exec plugin if present
-	if restConfig.ExecProvider != nil {
-		authInfo.Exec = &clientcmdapi.ExecConfig{
-			Command:            restConfig.ExecProvider.Command,
-			Args:               restConfig.ExecProvider.Args,
-			APIVersion:         restConfig.ExecProvider.APIVersion,
-			InstallHint:        restConfig.ExecProvider.InstallHint,
-			ProvideClusterInfo: restConfig.ExecProvider.ProvideClusterInfo,
-		}
-
-		// Convert environment variables
-		if restConfig.ExecProvider.Env != nil {
-			authInfo.Exec.Env = make([]clientcmdapi.ExecEnvVar, len(restConfig.ExecProvider.Env))
-			for i, env := range restConfig.ExecProvider.Env {
-				authInfo.Exec.Env[i] = clientcmdapi.ExecEnvVar{
-					Name:  env.Name,
-					Value: env.Value,
-				}
-			}
-		}
-	}
-
-	// Create the context
-	kubeContext := &clientcmdapi.Context{
-		Cluster:   clusterName,
-		AuthInfo:  userName,
-		Namespace: "default",
-	}
-
-	// Build the final Config
-	config := &clientcmdapi.Config{
-		Kind:       "Config",
-		APIVersion: "v1",
-		Clusters: map[string]*clientcmdapi.Cluster{
-			clusterName: cluster,
-		},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			userName: authInfo,
-		},
-		Contexts: map[string]*clientcmdapi.Context{
-			contextName: kubeContext,
-		},
-		CurrentContext: contextName,
-	}
-
-	return config
 }
 
 // IsHelmModule checks if a module is a Helm module by examining its resource annotation
