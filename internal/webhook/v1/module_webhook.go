@@ -251,13 +251,103 @@ func validateModuleSource(
 			"'github' module source type is not yet supported",
 		)
 	} else if moduleSource.ExistingHelmRelease != nil {
-		return field.Invalid(
-			fldPath.Child("existingHelmRelease"),
-			moduleSource.ExistingHelmRelease,
-			"'existingHelmRelease' module source type is not yet supported",
-		)
+		// Validate chartSource is provided and valid
+		if moduleSource.ExistingHelmRelease.ChartSource == nil {
+			return field.Required(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				"chartSource is required for existingHelmRelease",
+			)
+		}
+
+		// Validate that exactly one chart source type is specified
+		chartSource := moduleSource.ExistingHelmRelease.ChartSource
+		sourceCount := 0
+		if chartSource.Repository != nil {
+			sourceCount++
+		}
+		if chartSource.Git != nil {
+			sourceCount++
+		}
+		if chartSource.ConfigMap != nil {
+			sourceCount++
+		}
+		if chartSource.HttpURL != nil {
+			sourceCount++
+		}
+
+		if sourceCount == 0 {
+			return field.Required(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				"exactly one of 'repository', 'git', 'configMap', or 'httpURL' must be specified",
+			)
+		}
+		if sourceCount > 1 {
+			return field.Invalid(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				chartSource,
+				"only one of 'repository', 'git', 'configMap', or 'httpURL' can be specified",
+			)
+		}
+
+		// Validate Git repo URL if provided
+		if chartSource.Git != nil {
+			if chartSource.Git.Repo == "" {
+				return field.Required(
+					fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("repo"),
+					"git repo URL is required",
+				)
+			}
+			if chartSource.Git.Path == "" {
+				return field.Required(
+					fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("path"),
+					"git path is required",
+				)
+			}
+
+			// Validate auth secret if provided
+			if chartSource.Git.Auth != nil {
+				secret := &corev1.Secret{}
+				err := c.Get(ctx, k8sTypes.NamespacedName{
+					Name:      chartSource.Git.Auth.SecretRef.Name,
+					Namespace: chartSource.Git.Auth.SecretRef.Namespace,
+				}, secret)
+
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						return field.Invalid(
+							fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+							chartSource.Git.Auth.SecretRef,
+							fmt.Sprintf("secret %s/%s not found",
+								chartSource.Git.Auth.SecretRef.Namespace, chartSource.Git.Auth.SecretRef.Name),
+						)
+					}
+					return field.InternalError(
+						fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+						fmt.Errorf("failed to validate Secret reference: %v", err),
+					)
+				}
+
+				// Validate that secret contains required fields for HTTPS or SSH
+				hasHTTPSAuth := secret.Data["username"] != nil && secret.Data["password"] != nil
+				hasSSHAuth := secret.Data["sshPrivateKey"] != nil
+
+				if !hasHTTPSAuth && !hasSSHAuth {
+					return field.Invalid(
+						fldPath.Child("existingHelmRelease").Child("chartSource").Child("git").Child("auth").Child("secretRef"),
+						chartSource.Git.Auth.SecretRef,
+						"secret must contain either 'username' and 'password' fields (for HTTPS) or 'sshPrivateKey' field (for SSH)",
+					)
+				}
+			}
+		}
+
+		return nil
 	} else {
-		return field.Invalid(fldPath, moduleSource, "exactly one of 'raw', 'configMap', or 'httpURL' must be specified")
+		return field.Invalid(
+			fldPath,
+			moduleSource,
+			"exactly one of 'raw', 'configMap', 'httpURL', or 'existingHelmRelease' must be specified",
+		)
 	}
 }
 

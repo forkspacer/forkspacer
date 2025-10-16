@@ -110,8 +110,9 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	// Skip uninstallation for adopted releases - just detach
 	if module.Annotations != nil && module.Annotations["forkspacer.com/adopted-release"] == "true" {
-		log.Info("skipping uninstall for adopted Helm release - only detaching from workspace",
-			"release", module.Annotations["forkspacer.com/release-name"])
+		log.Info("skipping uninstall for adopted Helm release - only detaching from module",
+			"release", module.Annotations["forkspacer.com/release-name"],
+		)
 		return nil
 	}
 
@@ -345,18 +346,61 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		)
 	}
 
-	// TODO: Verify the release exists by creating HelmService and checking release status
-	// helmService, err := r.newHelmService(ctx, workspace.Spec.Connection)
-	// if err != nil {
-	//     return fmt.Errorf("failed to create Helm service: %w", err)
-	// }
-	// ... verify release exists ...
+	// Create Helm service to verify and retrieve release information
+	helmService, err := r.newHelmService(ctx, &workspace.Spec.Connection)
+	if err != nil {
+		return fmt.Errorf("failed to create Helm service: %w", err)
+	}
+
+	// Verify the release exists
+	release, err := helmService.GetRelease(ref.Name, ref.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get release: %w", err)
+	}
+
+	log.Info("found existing Helm release",
+		"release", ref.Name,
+		"namespace", ref.Namespace,
+		"chart", release.Chart.Metadata.Name,
+		"version", release.Chart.Metadata.Version,
+	)
 
 	annotations := map[string]string{
-		kubernetesCons.ModuleAnnotationKeys.Resource: "adopted", // Marker that this is adopted
-		"forkspacer.com/adopted-release":             "true",
-		"forkspacer.com/release-name":                ref.Name,
-		"forkspacer.com/release-namespace":           ref.Namespace,
+		"forkspacer.com/adopted-release":   "true",
+		"forkspacer.com/release-name":      ref.Name,
+		"forkspacer.com/release-namespace": ref.Namespace,
+		"forkspacer.com/original-chart":    release.Chart.Metadata.Name,
+		"forkspacer.com/original-version":  release.Chart.Metadata.Version,
+	}
+
+	// Get the rendered manifests (needed for both modes)
+	manifest := release.Manifest
+	if manifest == "" {
+		return fmt.Errorf("release manifest is empty")
+	}
+
+	// Store manifests for sleep/resume operations (needed in both modes)
+	annotations[kubernetesCons.ModuleAnnotationKeys.Resource] = manifest
+
+	// Store values for reference
+	valuesJSON, err := json.Marshal(release.Config)
+	if err != nil {
+		log.Error(err, "failed to marshal release values, continuing without them")
+	} else {
+		annotations["forkspacer.com/original-values"] = string(valuesJSON)
+	}
+
+	// Store chart source for future upgrade operations
+	chartSourceJSON, err := json.Marshal(ref.ChartSource)
+	if err != nil {
+		return fmt.Errorf("failed to marshal chart source: %w", err)
+	}
+
+	annotations["forkspacer.com/chart-source"] = string(chartSourceJSON)
+
+	// Store config if provided
+	if module.Spec.Config != nil && module.Spec.Config.Raw != nil {
+		annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig] = string(module.Spec.Config.Raw)
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())
@@ -369,6 +413,10 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return err
 	}
 
-	log.Info("successfully adopted existing Helm release", "release", ref.Name, "namespace", ref.Namespace)
+	log.Info("successfully adopted existing Helm release",
+		"release", ref.Name,
+		"namespace", ref.Namespace,
+		"chart", release.Chart.Metadata.Name,
+	)
 	return nil
 }
