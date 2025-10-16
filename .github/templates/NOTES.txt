@@ -53,21 +53,8 @@
 kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-api-server 8080:8080
 echo "📚 API Docs: http://localhost:8080/api/v1/docs"
 To enable the web UI, upgrade with:
-helm upgrade {{ .Release.Name }} ./helm --set operator-ui.enabled=true
+--set operator-ui.enabled=true
 {{- end }}
 ────────────────────────────────────────────────────────────────
-🛠️  DEPLOYMENT EXAMPLES for different environments:
-   # Local Development (kind/minikube) - Best of both worlds
-   helm upgrade {{ .Release.Name }} ./helm \
-     --set operator-ui.enabled=true \
-     --set ingress.enabled=true \
-     --set operator-ui.service.type=NodePort \
-     --set api-server.service.type=NodePort
-   # Production with custom domain and unified ingress
-   helm upgrade {{ .Release.Name }} ./helm \
-     --set operator-ui.enabled=true \
-     --set ingress.enabled=true \
-     --set ingress.hosts[0].host=forkspacer.company.com
-   # Simple ClusterIP with port-forward
-   helm upgrade {{ .Release.Name }} ./helm \
-     --set operator-ui.enabled=true
+📖 For more information and documentation, visit:
+   https://github.com/forkspacer/forkspacer
