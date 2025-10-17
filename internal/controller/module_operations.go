@@ -37,6 +37,18 @@ import (
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
+// ErrWorkspaceNotReady indicates that the workspace exists but is not ready yet
+// Controllers should requeue when this error is encountered
+type ErrWorkspaceNotReady struct {
+	WorkspaceName      string
+	WorkspaceNamespace string
+	Message            string
+}
+
+func (e *ErrWorkspaceNotReady) Error() string {
+	return fmt.Sprintf("workspace %s/%s not ready: %s", e.WorkspaceNamespace, e.WorkspaceName, e.Message)
+}
+
 func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Module) error {
 	log := logf.FromContext(ctx)
 
@@ -53,15 +65,21 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		return fmt.Errorf("failed to get workspace: %v", err)
 	}
 
+	// If workspace is not ready yet, return a special error that tells the controller to requeue
 	if !workspace.Status.Ready {
-		return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
+		return &ErrWorkspaceNotReady{
+			WorkspaceName:      workspace.Name,
+			WorkspaceNamespace: workspace.Namespace,
+			Message:            "workspace exists but status.ready is false",
+		}
 	}
 
 	if workspace.Status.Phase != batchv1.WorkspacePhaseReady {
-		return fmt.Errorf(
-			"workspace not in running phase: workspace %s/%s is not in '%s' phase, current phase is %s",
-			workspace.Namespace, workspace.Name, batchv1.WorkspacePhaseReady, workspace.Status.Phase,
-		)
+		return &ErrWorkspaceNotReady{
+			WorkspaceName:      workspace.Name,
+			WorkspaceNamespace: workspace.Namespace,
+			Message:            fmt.Sprintf("workspace phase is %s, waiting for %s", workspace.Status.Phase, batchv1.WorkspacePhaseReady),
+		}
 	}
 
 	moduleReader, err := r.readModuleLocation(ctx, module.Spec.Source)
@@ -361,15 +379,21 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return fmt.Errorf("failed to get workspace: %v", err)
 	}
 
+	// If workspace is not ready yet, return a special error that tells the controller to requeue
 	if !workspace.Status.Ready {
-		return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
+		return &ErrWorkspaceNotReady{
+			WorkspaceName:      workspace.Name,
+			WorkspaceNamespace: workspace.Namespace,
+			Message:            "workspace exists but status.ready is false",
+		}
 	}
 
 	if workspace.Status.Phase != batchv1.WorkspacePhaseReady {
-		return fmt.Errorf(
-			"workspace not in running phase: workspace %s/%s is not in '%s' phase, current phase is %s",
-			workspace.Namespace, workspace.Name, batchv1.WorkspacePhaseReady, workspace.Status.Phase,
-		)
+		return &ErrWorkspaceNotReady{
+			WorkspaceName:      workspace.Name,
+			WorkspaceNamespace: workspace.Namespace,
+			Message:            fmt.Sprintf("workspace phase is %s, waiting for %s", workspace.Status.Phase, batchv1.WorkspacePhaseReady),
+		}
 	}
 
 	// Create Helm service to verify and retrieve release information

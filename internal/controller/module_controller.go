@@ -158,6 +158,17 @@ func (r *ModuleReconciler) handleEmptyPhase(ctx context.Context, module *batchv1
 	}
 
 	if err := r.installModule(ctx, module); err != nil {
+		// Check if this is a workspace not ready error - if so, requeue without marking as failed
+		var errWorkspaceNotReady *ErrWorkspaceNotReady
+		if errors.As(err, &errWorkspaceNotReady) {
+			log.Info("workspace not ready yet, will retry",
+				"workspace", errWorkspaceNotReady.WorkspaceName,
+				"workspace_namespace", errWorkspaceNotReady.WorkspaceNamespace,
+				"reason", errWorkspaceNotReady.Message)
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		}
+
+		// For other errors, mark module as failed
 		log.Error(err, "module installation failed")
 		r.Recorder.Event(module, "Warning", "InstallError", fmt.Sprintf("Module installation failed: %v", err))
 
