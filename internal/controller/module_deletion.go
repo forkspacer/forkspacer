@@ -39,17 +39,16 @@ func (r *ModuleReconciler) handleDeletion(ctx context.Context, module *batchv1.M
 		return ctrl.Result{RequeueAfter: time.Second * 2}, nil
 	}
 
-	modulePhase := module.Status.Phase
 	if err := r.setPhase(ctx, module, batchv1.ModulePhaseUninstalling, nil); err != nil {
 		return ctrl.Result{}, err
 	}
 
+	// Attempt uninstallation but always proceed with finalizer removal
+	// even if uninstall fails to prevent stuck resources
 	if err := r.uninstallModule(ctx, module); err != nil {
-		log.Error(err, "module uninstallation failed")
-		if modulePhase != batchv1.ModulePhaseFailed {
-			r.Recorder.Event(module, "Warning", "UninstallError", fmt.Sprintf("Module uninstallation failed: %v", err))
-			return ctrl.Result{}, err
-		}
+		log.Error(err, "module uninstallation failed, proceeding with finalizer removal to allow deletion")
+		r.Recorder.Event(module, "Warning", "UninstallError",
+			fmt.Sprintf("Module uninstallation failed: %v. Finalizer will be removed to allow deletion.", err))
 	}
 
 	return ctrl.Result{}, retry.RetryOnConflict(

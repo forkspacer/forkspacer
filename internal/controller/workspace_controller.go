@@ -384,20 +384,40 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 	r.removeSleepCron(workspace.UID)
 	r.removeResumeCron(workspace.UID)
 
+	// Delete all modules and wait for deletion with timeout
 	for _, module := range modules.Items {
-	deleteLoop:
-		for {
-			if err := r.Delete(ctx, &module); err != nil {
-				log.Error(err, "failed to delete module", "namespace", module.Namespace, "module", module.Name)
-				time.Sleep(1 * time.Second)
-				continue
+		moduleCopy := module // Avoid loop variable capture
+
+		// Attempt to delete the module
+		if err := r.Delete(ctx, &moduleCopy); err != nil {
+			if !k8sErrors.IsNotFound(err) {
+				log.Error(err, "failed to delete module", "namespace", moduleCopy.Namespace, "name", moduleCopy.Name)
 			}
-			for range 10 {
-				if err := r.Get(ctx, client.ObjectKeyFromObject(&module), &module); err != nil {
-					break deleteLoop
+			// Continue to next module even if deletion fails
+			continue
+		}
+
+		// Wait up to 60 seconds for module to be deleted
+		deletionTimeout := time.Now().Add(60 * time.Second)
+		deleted := false
+
+		for time.Now().Before(deletionTimeout) {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(&moduleCopy), &moduleCopy); err != nil {
+				if k8sErrors.IsNotFound(err) {
+					deleted = true
+					break
 				}
-				time.Sleep(2 * time.Second)
+				log.Error(err, "error checking module deletion status", "namespace", moduleCopy.Namespace, "name", moduleCopy.Name)
 			}
+			time.Sleep(2 * time.Second)
+		}
+
+		if !deleted {
+			log.Info("module deletion timed out, proceeding with workspace deletion",
+				"namespace", moduleCopy.Namespace, "name", moduleCopy.Name,
+				"phase", moduleCopy.Status.Phase)
+			r.Recorder.Event(workspace, "Warning", "ModuleDeletionTimeout",
+				fmt.Sprintf("Module %s/%s deletion timed out. Manual cleanup may be required.", moduleCopy.Namespace, moduleCopy.Name))
 		}
 	}
 
