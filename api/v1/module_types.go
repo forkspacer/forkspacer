@@ -46,6 +46,10 @@ type ModuleSourceConfigMapRef struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace"`
+
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key,omitempty"`
 }
 
 type ModuleSourceExistingHelmReleaseRef struct {
@@ -62,16 +66,13 @@ type ModuleSourceExistingHelmReleaseRef struct {
 	// ChartSource defines the Helm chart source for managing this release.
 	// Required for installation and future operations (upgrades, reconfigurations).
 	// +required
-	ChartSource *ModuleSourceChartRef `json:"chartSource"`
+	ChartSource ModuleSourceChartRef `json:"chartSource"`
 }
 
 // ModuleSourceChartRef defines a reference to a Helm chart source
 type ModuleSourceChartRef struct {
 	// +optional
 	ConfigMap *ModuleSourceConfigMapRef `json:"configMap,omitempty"`
-
-	// +optional
-	HttpURL *string `json:"httpURL,omitempty"`
 
 	// Repository-based chart (e.g., from Helm repository)
 	// +optional
@@ -93,7 +94,7 @@ type ModuleSourceChartRepository struct {
 	Chart string `json:"chart"`
 
 	// +optional
-	Version string `json:"version,omitempty"`
+	Version *string `json:"version,omitempty"`
 }
 
 // ModuleSourceChartGit defines a chart from a Git repository
@@ -108,10 +109,9 @@ type ModuleSourceChartGit struct {
 	// +kubebuilder:validation:MinLength=1
 	Path string `json:"path"`
 
-	// Git revision (branch, tag, or commit SHA)
+	// Git revision (branch, tag)
 	// +kubebuilder:default=main
-	// +optional
-	Revision string `json:"revision,omitempty"`
+	Revision string `json:"revision"`
 
 	// Authentication credentials for private repositories
 	// +optional
@@ -121,10 +121,23 @@ type ModuleSourceChartGit struct {
 // ModuleSourceChartGitAuth defines authentication for Git repositories
 type ModuleSourceChartGitAuth struct {
 	// Reference to a Secret containing Git credentials
-	// For HTTPS: username and password/token fields
-	// For SSH: sshPrivateKey field
+	// username and token fields
+	// +optional
+	HTTPSSecretRef *ModuleSourceChartGitAuthSecretRef `json:"httpsSecretRef"`
+
+	// SShSecretRef ModuleSourceConfigMapRef `json:"sshSecretRef"` // TODO
+}
+
+type ModuleSourceChartGitAuthSecretRef struct {
 	// +required
-	SecretRef ModuleSourceConfigMapRef `json:"secretRef"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
 }
 
 type ModuleSource struct {
@@ -200,6 +213,8 @@ type ModuleStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=mo
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.workspace.namespace",name=Workspace NS,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.workspace.name",name=Workspace Name,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.lastActivity",name=Last Activity,type=string,format=date-time
 // +kubebuilder:printcolumn:JSONPath=".status.message",name=Message,type=string
 

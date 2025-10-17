@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
@@ -13,6 +15,7 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
 	corev1 "k8s.io/api/core/v1"
@@ -131,7 +134,8 @@ func NewHelmService(
 
 func (service HelmService) InstallFromRepository(
 	ctx context.Context,
-	chartName, releaseName, namespace, repoURL, version string,
+	chartName, releaseName, namespace, repoURL string,
+	version *string,
 	wait bool,
 	helmValues []resources.HelmValues,
 ) error {
@@ -140,9 +144,11 @@ func (service HelmService) InstallFromRepository(
 	actionClient.CreateNamespace = true
 	actionClient.RepoURL = repoURL
 	actionClient.ReleaseName = releaseName
-	actionClient.Version = version
+	if version != nil {
+		actionClient.Version = *version
+	}
 	actionClient.Wait = wait
-	actionClient.Timeout = 15 * time.Minute
+	actionClient.Timeout = 5 * time.Minute
 
 	mergedValues, err := service.MergeHelmValues(ctx, helmValues)
 	if err != nil {
@@ -170,6 +176,70 @@ func (service HelmService) InstallFromRepository(
 	return nil
 }
 
+func (service HelmService) InstallFromLocal(
+	ctx context.Context,
+	chartPath, releaseName, namespace string,
+	wait bool,
+	helmValues []resources.HelmValues,
+) error {
+	actionClient := action.NewInstall(service.actionConfig)
+	actionClient.Namespace = namespace
+	actionClient.CreateNamespace = true
+	actionClient.ReleaseName = releaseName
+	actionClient.Wait = wait
+	actionClient.Timeout = 5 * time.Minute
+
+	mergedValues, err := service.MergeHelmValues(ctx, helmValues)
+	if err != nil {
+		return err
+	}
+
+	// Build dependencies if needed before loading the chart
+	if err := service.buildDependencies(chartPath); err != nil {
+		return fmt.Errorf("failed to build chart dependencies: %w", err)
+	}
+
+	chart, err := loader.Load(chartPath)
+	if err != nil {
+		return fmt.Errorf("failed to load chart from archive: %w", err)
+	}
+
+	_, err = actionClient.RunWithContext(ctx, chart, mergedValues)
+	if err != nil {
+		go func() {
+			_ = service.UninstallRelease(ctx, releaseName, namespace, true, true)
+		}()
+		return fmt.Errorf("failed to install chart from archive: %w", err)
+	}
+
+	return nil
+}
+
+func (service HelmService) GetRelease(releaseName, namespace string) (*release.Release, error) {
+	// Create a namespace-specific action configuration to avoid modifying the shared one
+	actionConfig := new(action.Configuration)
+	if err := actionConfig.Init(
+		&helmConfigFlags{
+			config:    service.kubernetesConfig,
+			namespace: namespace,
+		},
+		namespace,
+		os.Getenv("HELM_DRIVER"),
+		func(format string, v ...any) {}, // no-op debug logger
+	); err != nil {
+		return nil, fmt.Errorf("failed to initialize action config for namespace '%s': %w", namespace, err)
+	}
+
+	actionClient := action.NewGet(actionConfig)
+
+	rel, err := actionClient.Run(releaseName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get release '%s' in namespace '%s': %w", releaseName, namespace, err)
+	}
+
+	return rel, nil
+}
+
 func (service HelmService) UninstallRelease(
 	ctx context.Context,
 	releaseName, namespace string,
@@ -177,7 +247,7 @@ func (service HelmService) UninstallRelease(
 ) error {
 	actionClient := action.NewUninstall(service.actionConfig)
 	actionClient.Wait = true
-	actionClient.Timeout = 15 * time.Minute
+	actionClient.Timeout = 5 * time.Minute
 	actionClient.IgnoreNotFound = true
 	actionClient.DeletionPropagation = "foreground"
 
@@ -467,7 +537,12 @@ func (service HelmService) MergeHelmValues(
 				)
 			}
 
-			if configMapValues := configMap.Data[kubernetesCons.Helm.ValuesConfigMapKey]; configMapValues != "" {
+			key := helmValue.ConfigMap.Key
+			if key == "" {
+				key = kubernetesCons.Helm.ValuesConfigMapKey
+			}
+
+			if configMapValues := configMap.Data[key]; configMapValues != "" {
 				parsedConfigMapValues, err := chartutil.ReadValues([]byte(configMapValues))
 				if err != nil {
 					return nil, fmt.Errorf(
@@ -527,34 +602,60 @@ func (service HelmService) ListPVCs(
 	return pvcList, nil
 }
 
-// GetRelease retrieves information about an existing Helm release
-func (service HelmService) GetRelease(releaseName, namespace string) (*release.Release, error) {
-	actionClient := action.NewGet(service.actionConfig)
-
-	rel, err := actionClient.Run(releaseName)
+// buildDependencies builds chart dependencies if the chart has any and they are missing
+func (service HelmService) buildDependencies(chartPath string) error {
+	// Check if chartPath is a directory (unpacked chart) or a file (packed .tgz)
+	fileInfo, err := os.Stat(chartPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get release '%s' in namespace '%s': %w", releaseName, namespace, err)
+		return fmt.Errorf("failed to stat chart path: %w", err)
 	}
 
-	return rel, nil
-}
-
-// GetReleaseManifest retrieves the rendered manifest of a Helm release
-func (service HelmService) GetReleaseManifest(releaseName, namespace string) (string, error) {
-	rel, err := service.GetRelease(releaseName, namespace)
-	if err != nil {
-		return "", err
+	// If it's a packed chart (.tgz file), dependencies should already be included
+	if !fileInfo.IsDir() {
+		return nil
 	}
 
-	return rel.Manifest, nil
-}
-
-// GetReleaseValues retrieves the values used for a Helm release
-func (service HelmService) GetReleaseValues(releaseName, namespace string) (map[string]any, error) {
-	rel, err := service.GetRelease(releaseName, namespace)
-	if err != nil {
-		return nil, err
+	// For directory charts, check if Chart.yaml exists
+	chartYamlPath := filepath.Join(chartPath, "Chart.yaml")
+	if _, err := os.Stat(chartYamlPath); os.IsNotExist(err) {
+		// No Chart.yaml, nothing to do
+		return nil
 	}
 
-	return rel.Config, nil
+	// Load the chart metadata to check for dependencies
+	chartMetadata, err := loader.LoadDir(chartPath)
+	if err != nil {
+		return fmt.Errorf("failed to load chart metadata: %w", err)
+	}
+
+	// If there are no dependencies, skip
+	if len(chartMetadata.Metadata.Dependencies) == 0 {
+		return nil
+	}
+
+	// Check if dependencies are already present
+	chartsDir := filepath.Join(chartPath, "charts")
+	if _, err := os.Stat(chartsDir); os.IsNotExist(err) {
+		// charts/ directory doesn't exist, need to download dependencies
+		if err := os.MkdirAll(chartsDir, 0755); err != nil {
+			return fmt.Errorf("failed to create charts directory: %w", err)
+		}
+	}
+
+	// Use Helm's dependency manager to download and build dependencies
+	man := &downloader.Manager{
+		Out:              io.Discard, // Discard output to avoid nil pointer issues
+		ChartPath:        chartPath,
+		SkipUpdate:       false,
+		Getters:          getter.All(service.settings),
+		RepositoryConfig: service.settings.RepositoryConfig,
+		RepositoryCache:  service.settings.RepositoryCache,
+		Debug:            service.settings.Debug,
+	}
+
+	if err := man.Build(); err != nil {
+		return fmt.Errorf("failed to build dependencies: %w", err)
+	}
+
+	return nil
 }

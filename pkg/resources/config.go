@@ -25,10 +25,10 @@ type ConfigItem struct {
 
 // OptionSpec defines the spec for an "option" type.
 type OptionSpec struct {
-	Required bool     `yaml:"required"`
-	Default  string   `yaml:"default"`
-	Values   []string `yaml:"values"`
-	Editable bool     `yaml:"editable"`
+	Required bool     `yaml:"required" json:"required"`
+	Default  string   `yaml:"default" json:"default"`
+	Values   []string `yaml:"values" json:"values"`
+	Editable bool     `yaml:"editable" json:"editable"`
 }
 
 // OptionValidator implements the Validator interface for OptionSpec.
@@ -62,10 +62,10 @@ func (ov *OptionValidator) IsEditable() bool {
 
 // StringSpec defines the spec for a "string" type.
 type StringSpec struct {
-	Required bool   `yaml:"required"`
-	Default  string `yaml:"default"`
-	Regex    string `yaml:"regex"`
-	Editable bool   `yaml:"editable"`
+	Required bool   `yaml:"required" json:"required"`
+	Default  string `yaml:"default" json:"default"`
+	Regex    string `yaml:"regex" json:"regex"`
+	Editable bool   `yaml:"editable" json:"editable"`
 }
 
 // StringValidator implements the Validator interface for StringSpec.
@@ -101,11 +101,11 @@ func (sv *StringValidator) IsEditable() bool {
 
 // IntegerSpec defines the spec for an "integer" type.
 type IntegerSpec struct {
-	Required bool `yaml:"required"`
-	Default  int  `yaml:"default"`
-	Min      *int `yaml:"min"`
-	Max      *int `yaml:"max"`
-	Editable bool `yaml:"editable"`
+	Required bool `yaml:"required" json:"required"`
+	Default  int  `yaml:"default" json:"default"`
+	Min      *int `yaml:"min" json:"min"`
+	Max      *int `yaml:"max" json:"max"`
+	Editable bool `yaml:"editable" json:"editable"`
 }
 
 // IntegerValidator implements the Validator interface for IntegerSpec.
@@ -149,11 +149,11 @@ func (iv *IntegerValidator) IsEditable() bool {
 
 // FloatSpec defines the spec for a "float" type.
 type FloatSpec struct {
-	Required bool     `yaml:"required"`
-	Default  float64  `yaml:"default"`
-	Min      *float64 `yaml:"min"`
-	Max      *float64 `yaml:"max"`
-	Editable bool     `yaml:"editable"`
+	Required bool     `yaml:"required" json:"required"`
+	Default  float64  `yaml:"default" json:"default"`
+	Min      *float64 `yaml:"min" json:"min"`
+	Max      *float64 `yaml:"max" json:"max"`
+	Editable bool     `yaml:"editable" json:"editable"`
 }
 
 // FloatValidator implements the Validator interface for FloatSpec.
@@ -197,9 +197,9 @@ func (fv *FloatValidator) IsEditable() bool {
 
 // BooleanSpec defines the spec for a "boolean" type.
 type BooleanSpec struct {
-	Required bool `yaml:"required"`
-	Default  bool `yaml:"default"`
-	Editable bool `yaml:"editable"`
+	Required bool `yaml:"required" json:"required"`
+	Default  bool `yaml:"default" json:"default"`
+	Editable bool `yaml:"editable" json:"editable"`
 }
 
 // BooleanValidator implements the Validator interface for BooleanSpec.
@@ -229,12 +229,12 @@ func (bv *BooleanValidator) IsEditable() bool {
 
 // MultipleOptionsSpec defines the spec for a "multiple-options" type.
 type MultipleOptionsSpec struct {
-	Required bool     `yaml:"required"`
-	Default  []string `yaml:"default"`
-	Values   []string `yaml:"values"`
-	Min      *int     `yaml:"min"`
-	Max      *int     `yaml:"max"`
-	Editable bool     `yaml:"editable"`
+	Required bool     `yaml:"required" json:"required"`
+	Default  []string `yaml:"default" json:"default"`
+	Values   []string `yaml:"values" json:"values"`
+	Min      *int     `yaml:"min" json:"min"`
+	Max      *int     `yaml:"max" json:"max"`
+	Editable bool     `yaml:"editable" json:"editable"`
 }
 
 // MultipleOptionsValidator implements the Validator interface for MultipleOptionsSpec.

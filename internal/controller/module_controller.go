@@ -275,7 +275,7 @@ func (r *ModuleReconciler) newManager(
 				return err
 			}
 
-			iManager, err = manager.NewModuleHelmManager(&helmModule, helmService, releaseName, logf.FromContext(ctx))
+			iManager, err = manager.NewModuleHelmManager(&helmModule, helmService, releaseName, r.Client, logf.FromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to install Helm module: %w", err)
 			}

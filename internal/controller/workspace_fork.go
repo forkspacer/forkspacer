@@ -7,11 +7,14 @@ import (
 	"time"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/yaml"
 )
 
 func (r *WorkspaceReconciler) forkWorkspace(
@@ -56,6 +59,35 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					Hibernated: module.Spec.Hibernated,
 				},
 			}
+			if newModule.Spec.Source.ExistingHelmRelease != nil {
+				resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
+				if resource == "" {
+					log.Error(errors.New("missing Helm release resource annotation"),
+						"Annotation containing raw Helm release YAML is missing for module with ExistingHelmRelease source",
+						"module_name", module.Name,
+						"module_namespace", module.Namespace,
+					)
+					return
+				}
+
+				resourceJSON, err := yaml.YAMLToJSON([]byte(resource))
+				if err != nil {
+					log.Error(err,
+						"Failed to parse resource annotation YAML to JSON",
+						"module_name", module.Name,
+						"module_namespace", module.Namespace,
+					)
+					return
+				}
+
+				newModule.Spec.Source.Raw = &runtime.RawExtension{Raw: resourceJSON}
+				newModule.Spec.Source.ExistingHelmRelease = nil
+				newModule.Spec.Source.ConfigMap = nil
+				newModule.Spec.Source.Github = nil
+				newModule.Spec.Source.HttpURL = nil
+				newModule.Spec.Config = nil
+			}
+
 			if err = r.Create(ctx, newModule); err != nil {
 				log.Error(err,
 					"failed to create module from source workspace",

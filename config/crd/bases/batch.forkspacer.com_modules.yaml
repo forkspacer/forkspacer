@@ -20,6 +20,12 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .spec.workspace.namespace
+      name: Workspace NS
+      type: string
+    - jsonPath: .spec.workspace.name
+      name: Workspace Name
+      type: string
     - format: date-time
       jsonPath: .status.lastActivity
       name: Last Activity
@@ -62,6 +68,9 @@ spec:
                 properties:
                   configMap:
                     properties:
+                      key:
+                        minLength: 1
+                        type: string
                       name:
                         maxLength: 253
                         minLength: 1
@@ -84,6 +93,9 @@ spec:
                         properties:
                           configMap:
                             properties:
+                              key:
+                                minLength: 1
+                                type: string
                               name:
                                 maxLength: 253
                                 minLength: 1
@@ -104,11 +116,10 @@ spec:
                                 description: Authentication credentials for private
                                   repositories
                                 properties:
-                                  secretRef:
+                                  httpsSecretRef:
                                     description: |-
                                       Reference to a Secret containing Git credentials
-                                      For HTTPS: username and password/token fields
-                                      For SSH: sshPrivateKey field
+                                      username and token fields
                                     properties:
                                       name:
                                         maxLength: 253
@@ -123,8 +134,6 @@ spec:
                                     - name
                                     - namespace
                                     type: object
-                                required:
-                                - secretRef
                                 type: object
                               path:
                                 description: Path to the chart directory containing
@@ -137,15 +146,13 @@ spec:
                                 type: string
                               revision:
                                 default: main
-                                description: Git revision (branch, tag, or commit
-                                  SHA)
+                                description: Git revision (branch, tag)
                                 type: string
                             required:
                             - path
                             - repo
+                            - revision
                             type: object
-                          httpURL:
-                            type: string
                           repository:
                             description: Repository-based chart (e.g., from Helm repository)
                             properties:
