@@ -25,6 +25,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 	"helm.sh/helm/v3/pkg/chartutil"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -127,7 +128,25 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 
 	workspace, err := r.getWorkspace(ctx, &module.Spec.Workspace)
 	if err != nil {
+		// If workspace doesn't exist (already deleted), skip uninstall
+		// This prevents orphaned modules from getting stuck when workspace is deleted
+		if k8sErrors.IsNotFound(err) {
+			log.Info("workspace not found, skipping uninstall for module",
+				"module", module.Name,
+				"namespace", module.Namespace,
+				"workspace", module.Spec.Workspace.Name)
+			return nil
+		}
 		return fmt.Errorf("failed to get workspace for module %s/%s: %v", module.Namespace, module.Name, err)
+	}
+
+	// If workspace is being deleted, skip uninstall to prevent deadlock
+	if workspace.DeletionTimestamp != nil {
+		log.Info("workspace is being deleted, skipping uninstall for module",
+			"module", module.Name,
+			"namespace", module.Namespace,
+			"workspace", workspace.Name)
+		return nil
 	}
 
 	if !workspace.Status.Ready {
