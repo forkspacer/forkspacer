@@ -25,7 +25,12 @@ import (
 
 	"go.yaml.in/yaml/v3"
 	"helm.sh/helm/v3/pkg/chartutil"
+	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -91,6 +96,13 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 	moduleData, err := io.ReadAll(moduleReader)
 	if err != nil {
 		return fmt.Errorf("failed to read module data: %v", err)
+	}
+
+	// Create target namespace if requested
+	if module.Spec.CreateNamespace {
+		if err := r.ensureNamespace(ctx, moduleData, &workspace.Spec.Connection); err != nil {
+			return fmt.Errorf("failed to create namespace: %w", err)
+		}
 	}
 
 	annotations := map[string]string{
@@ -516,5 +528,87 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return fmt.Errorf("failed to patch module with adoption annotations: %w", err)
 	}
 
+	return nil
+}
+
+// ensureNamespace creates the target namespace if it doesn't exist
+func (r *ModuleReconciler) ensureNamespace(
+	ctx context.Context,
+	moduleData []byte,
+	workspaceConn *batchv1.WorkspaceConnection,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Parse module to extract namespace
+	var targetNamespace string
+	configMap := make(map[string]any)
+
+	err := resources.HandleResource(moduleData, &configMap,
+		func(helmModule resources.HelmModule) error {
+			targetNamespace = helmModule.Spec.Namespace
+			return nil
+		},
+		func(customModule resources.CustomModule) error {
+			targetNamespace = customModule.Spec.Namespace
+			return nil
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to parse module to extract namespace: %w", err)
+	}
+
+	if targetNamespace == "" {
+		return fmt.Errorf("module does not specify a target namespace")
+	}
+
+	// Get kubeconfig for target cluster
+	apiConfig, err := NewAPIConfig(ctx, workspaceConn, r.Client)
+	if err != nil {
+		return fmt.Errorf("failed to get API config: %w", err)
+	}
+
+	// Create Kubernetes client for target cluster
+	restConfig, err := clientcmd.BuildConfigFromKubeconfigGetter("", func() (*clientcmdapi.Config, error) {
+		return apiConfig, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to build REST config: %w", err)
+	}
+
+	targetClient, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Check if namespace exists
+	_, err = targetClient.CoreV1().Namespaces().Get(ctx, targetNamespace, metav1.GetOptions{})
+	if err == nil {
+		// Namespace already exists
+		log.V(1).Info("namespace already exists", "namespace", targetNamespace)
+		return nil
+	}
+
+	if !k8sErrors.IsNotFound(err) {
+		return fmt.Errorf("failed to check namespace existence: %w", err)
+	}
+
+	// Create namespace
+	log.Info("creating namespace", "namespace", targetNamespace)
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: targetNamespace,
+		},
+	}
+	_, err = targetClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	if err != nil {
+		if k8sErrors.IsAlreadyExists(err) {
+			// Race condition - namespace was created by another process
+			log.V(1).Info("namespace was created concurrently", "namespace", targetNamespace)
+			return nil
+		}
+		return fmt.Errorf("failed to create namespace %s: %w", targetNamespace, err)
+	}
+
+	log.Info("namespace created successfully", "namespace", targetNamespace)
 	return nil
 }

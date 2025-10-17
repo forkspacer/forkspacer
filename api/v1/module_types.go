@@ -187,6 +187,12 @@ type ModuleSpec struct {
 
 	// +kubebuilder:default=false
 	Hibernated bool `json:"hibernated"`
+
+	// CreateNamespace specifies whether to create the target namespace if it doesn't exist.
+	// Similar to ArgoCD's syncOptions.CreateNamespace.
+	// +optional
+	// +kubebuilder:default=false
+	CreateNamespace bool `json:"createNamespace"`
 }
 
 // ModuleStatus defines the observed state of Module.
