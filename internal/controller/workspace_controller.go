@@ -417,7 +417,8 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 				"namespace", moduleCopy.Namespace, "name", moduleCopy.Name,
 				"phase", moduleCopy.Status.Phase)
 			r.Recorder.Event(workspace, "Warning", "ModuleDeletionTimeout",
-				fmt.Sprintf("Module %s/%s deletion timed out. Manual cleanup may be required.", moduleCopy.Namespace, moduleCopy.Name))
+				fmt.Sprintf("Module %s/%s deletion timed out. Manual cleanup may be required.",
+					moduleCopy.Namespace, moduleCopy.Name))
 		}
 	}
 
