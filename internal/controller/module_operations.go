@@ -159,17 +159,21 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 		return fmt.Errorf("failed to get workspace for module %s/%s: %v", module.Namespace, module.Name, err)
 	}
 
-	if !workspace.Status.Ready {
-		return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
-	}
+	// If workspace is being deleted, skip ready/phase checks and proceed with uninstall
+	// Both resources are being cleaned up anyway
+	if workspace.DeletionTimestamp == nil {
+		if !workspace.Status.Ready {
+			return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
+		}
 
-	switch workspace.Status.Phase {
-	case batchv1.WorkspacePhaseReady, batchv1.WorkspacePhaseHibernated, batchv1.WorkspacePhaseFailed:
-	default:
-		return fmt.Errorf(
-			"workspace is not in a suitable phase for uninstallation: expected one of ['%s', '%s', '%s'], but got '%s'",
-			batchv1.WorkspacePhaseReady, batchv1.WorkspacePhaseHibernated, batchv1.WorkspacePhaseFailed, workspace.Status.Phase,
-		)
+		switch workspace.Status.Phase {
+		case batchv1.WorkspacePhaseReady, batchv1.WorkspacePhaseHibernated, batchv1.WorkspacePhaseFailed:
+		default:
+			return fmt.Errorf(
+				"workspace is not in a suitable phase for uninstallation: expected one of ['%s', '%s', '%s'], but got '%s'",
+				batchv1.WorkspacePhaseReady, batchv1.WorkspacePhaseHibernated, batchv1.WorkspacePhaseFailed, workspace.Status.Phase,
+			)
+		}
 	}
 
 	utils.InitMap(&module.Annotations)

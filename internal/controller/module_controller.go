@@ -90,6 +90,28 @@ func (r *ModuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	case batchv1.ModulePhaseInstalling, batchv1.ModulePhaseUninstalling,
 		batchv1.ModulePhaseSleeping, batchv1.ModulePhaseResuming:
+		// Check if module has been stuck in transitional phase for too long
+		if module.Status.LastActivity != nil {
+			timeSinceLastActivity := time.Since(module.Status.LastActivity.Time)
+			if timeSinceLastActivity > 5*time.Minute {
+				log.Error(
+					errors.New("module stuck in transitional phase"),
+					"module has been in transitional phase for too long, marking as failed",
+					"phase", module.Status.Phase,
+					"duration", timeSinceLastActivity.String(),
+				)
+				r.Recorder.Event(module, "Warning", "PhaseTimeout",
+					fmt.Sprintf("Module stuck in %s phase for %s, marking as failed",
+						module.Status.Phase, timeSinceLastActivity.String()))
+
+				if err := r.setPhase(ctx, module, batchv1.ModulePhaseFailed,
+					utils.ToPtr(fmt.Sprintf("Timed out in %s phase after %s",
+						module.Status.Phase, timeSinceLastActivity.String()))); err != nil {
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+		}
 		return ctrl.Result{RequeueAfter: time.Second * 2}, nil
 
 	default:
