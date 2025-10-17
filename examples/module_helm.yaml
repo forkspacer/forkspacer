@@ -112,6 +112,11 @@ spec:
     name: default
     # namespace: default
 
+  # Automatically create the target namespace if it doesn't exist
+  # Useful for workspace forking to avoid resource conflicts
+  # +optional
+  # createNamespace: true
+
   config:
     version: 21.2.7
     replicaCount: 0
