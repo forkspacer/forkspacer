@@ -354,12 +354,12 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 			}
 
 			if err := r.forkWorkspace(ctx, fromWorkspace, workspace); err != nil {
-				return ctrl.Result{}, fmt.Errorf(
-					"failed to fork workspace %s/%s from %s/%s: %w",
-					workspace.Namespace, workspace.Name,
-					fromWorkspace.Namespace, fromWorkspace.Name,
-					err,
-				)
+				// Log the error and requeue - modules might not be ready yet
+				log.Info("fork workspace failed, will retry",
+					"source_workspace", fmt.Sprintf("%s/%s", fromWorkspace.Namespace, fromWorkspace.Name),
+					"dest_workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
+					"error", err.Error())
+				return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 			}
 		}
 	}

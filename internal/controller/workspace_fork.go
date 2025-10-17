@@ -31,6 +31,28 @@ func (r *WorkspaceReconciler) forkWorkspace(
 		)
 	}
 
+	// Check that all source modules are ready before forking
+	// This prevents forking modules that haven't finished adoption/installation
+	for _, module := range modules.Items {
+		if module.Status.Phase != batchv1.ModulePhaseReady && module.Status.Phase != batchv1.ModulePhaseSleeped {
+			return fmt.Errorf(
+				"source module %s/%s is not ready (phase: %s), cannot fork yet. Will retry.",
+				module.Namespace, module.Name, module.Status.Phase,
+			)
+		}
+
+		// For ExistingHelmRelease modules, verify the annotation exists
+		if module.Spec.Source.ExistingHelmRelease != nil {
+			resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
+			if resource == "" {
+				return fmt.Errorf(
+					"source module %s/%s with ExistingHelmRelease source is missing required annotation, cannot fork yet. Will retry.",
+					module.Namespace, module.Name,
+				)
+			}
+		}
+	}
+
 	const maxNameLength = 253
 
 	for _, module := range modules.Items {
