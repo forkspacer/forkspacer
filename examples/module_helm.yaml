@@ -100,6 +100,13 @@ spec:
           url: https://charts.bitnami.com/bitnami
           chart: redis
           version: "21.2.9"
+      # Optional: Override specific values from the existing release
+      # These values will be merged with the existing release's values
+      # values:
+      #   replica:
+      #     replicaCount: 2
+      #   auth:
+      #     enabled: false
 
   workspace:
     name: default

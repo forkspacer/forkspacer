@@ -24,6 +24,7 @@ import (
 	"io"
 
 	"go.yaml.in/yaml/v3"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -402,6 +403,18 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return errors.New("unsupported chart source type for existing Helm release")
 	}
 
+	// Merge override values with existing release values
+	finalValues := release.Config
+	if ref.Values != nil && ref.Values.Raw != nil {
+		var overrideValues map[string]any
+		if err := json.Unmarshal(ref.Values.Raw, &overrideValues); err != nil {
+			return fmt.Errorf("failed to unmarshal override values: %w", err)
+		}
+
+		// Merge: override values take precedence over existing values
+		finalValues = chartutil.CoalesceTables(overrideValues, release.Config)
+	}
+
 	helmResource := resources.HelmModule{
 		BaseResource: resources.BaseResource{
 			TypeMeta: resources.TypeMeta{
@@ -419,7 +432,7 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 			Chart:     chartSource,
 			Values: []resources.HelmValues{
 				{
-					Raw: release.Config,
+					Raw: finalValues,
 				},
 			},
 		},

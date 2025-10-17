@@ -18,6 +18,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -256,7 +257,47 @@ func validateModuleSource(
 			"'github' module source type is not yet supported",
 		)
 	} else if moduleSource.ExistingHelmRelease != nil {
-		// TODO
+		ref := moduleSource.ExistingHelmRelease
+
+		// Validate that at least one chart source is specified
+		chartSourceCount := 0
+		if ref.ChartSource.Repository != nil {
+			chartSourceCount++
+		}
+		if ref.ChartSource.ConfigMap != nil {
+			chartSourceCount++
+		}
+		if ref.ChartSource.Git != nil {
+			chartSourceCount++
+		}
+
+		if chartSourceCount == 0 {
+			return field.Required(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				"at least one of 'repository', 'configMap', or 'git' must be specified",
+			)
+		}
+
+		if chartSourceCount > 1 {
+			return field.Invalid(
+				fldPath.Child("existingHelmRelease").Child("chartSource"),
+				ref.ChartSource,
+				"only one of 'repository', 'configMap', or 'git' can be specified",
+			)
+		}
+
+		// Validate values field if provided
+		if ref.Values != nil && ref.Values.Raw != nil {
+			var testValues map[string]any
+			if err := json.Unmarshal(ref.Values.Raw, &testValues); err != nil {
+				return field.Invalid(
+					fldPath.Child("existingHelmRelease").Child("values"),
+					string(ref.Values.Raw),
+					fmt.Sprintf("values must be valid JSON: %v", err),
+				)
+			}
+		}
+
 		return nil
 	} else {
 		return field.Invalid(

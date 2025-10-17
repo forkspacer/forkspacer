@@ -178,6 +178,12 @@ spec:
                         maxLength: 63
                         minLength: 1
                         type: string
+                      values:
+                        description: |-
+                          Values allows overriding specific values from the existing release.
+                          These values will be merged with the existing release's values.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     required:
                     - chartSource
                     - name

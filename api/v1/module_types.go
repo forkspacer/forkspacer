@@ -67,6 +67,11 @@ type ModuleSourceExistingHelmReleaseRef struct {
 	// Required for installation and future operations (upgrades, reconfigurations).
 	// +required
 	ChartSource ModuleSourceChartRef `json:"chartSource"`
+
+	// Values allows overriding specific values from the existing release.
+	// These values will be merged with the existing release's values.
+	// +optional
+	Values *runtime.RawExtension `json:"values,omitempty"`
 }
 
 // ModuleSourceChartRef defines a reference to a Helm chart source
