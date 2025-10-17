@@ -3,7 +3,7 @@ global:
   operatorUI:
     image:
       repository: ghcr.io/forkspacer/operator-ui
-      tag: v0.1.6
+      tag: v0.1.7
       pullPolicy: IfNotPresent
   apiServer:
     image:
