@@ -415,6 +415,16 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		finalValues = chartutil.CoalesceTables(overrideValues, release.Config)
 	}
 
+	// Build values array - only include if there are actual values
+	var helmValues []resources.HelmValues
+	if len(finalValues) > 0 {
+		helmValues = []resources.HelmValues{
+			{
+				Raw: finalValues,
+			},
+		}
+	}
+
 	helmResource := resources.HelmModule{
 		BaseResource: resources.BaseResource{
 			TypeMeta: resources.TypeMeta{
@@ -430,11 +440,7 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		Spec: resources.HelmModuleSpec{
 			Namespace: release.Namespace,
 			Chart:     chartSource,
-			Values: []resources.HelmValues{
-				{
-					Raw: finalValues,
-				},
-			},
+			Values:    helmValues,
 		},
 	}
 
