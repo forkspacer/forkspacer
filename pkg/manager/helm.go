@@ -105,7 +105,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 		// Create a temporary file to store the chart data.
 		// The pattern "helm-chart-*.tgz" ensures a unique name and .tgz extension.
 		// The file is created in the system's default temporary directory.
-		tmpFile, err := os.CreateTemp(fileCons.BaseDir, "helm-chart-*.tgz")
+		tmpFile, err := os.CreateTemp(fileCons.GetBaseDir(), "helm-chart-*.tgz")
 		if err != nil {
 			return fmt.Errorf("failed to create temporary file for Helm chart: %w", err)
 		}
@@ -186,7 +186,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 			}
 		}
 
-		tempDir, err := os.MkdirTemp(fileCons.BaseDir, "git-helm-chart-")
+		tempDir, err := os.MkdirTemp(fileCons.GetBaseDir(), "git-helm-chart-")
 		if err != nil {
 			return err
 		}
