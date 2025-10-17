@@ -78,7 +78,8 @@ func (r *ModuleReconciler) installModule(ctx context.Context, module *batchv1.Mo
 		return &ErrWorkspaceNotReady{
 			WorkspaceName:      workspace.Name,
 			WorkspaceNamespace: workspace.Namespace,
-			Message:            fmt.Sprintf("workspace phase is %s, waiting for %s", workspace.Status.Phase, batchv1.WorkspacePhaseReady),
+			Message: fmt.Sprintf("workspace phase is %s, waiting for %s",
+				workspace.Status.Phase, batchv1.WorkspacePhaseReady),
 		}
 	}
 
@@ -392,7 +393,8 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return &ErrWorkspaceNotReady{
 			WorkspaceName:      workspace.Name,
 			WorkspaceNamespace: workspace.Namespace,
-			Message:            fmt.Sprintf("workspace phase is %s, waiting for %s", workspace.Status.Phase, batchv1.WorkspacePhaseReady),
+			Message: fmt.Sprintf("workspace phase is %s, waiting for %s",
+				workspace.Status.Phase, batchv1.WorkspacePhaseReady),
 		}
 	}
 

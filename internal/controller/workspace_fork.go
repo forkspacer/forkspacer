@@ -36,7 +36,7 @@ func (r *WorkspaceReconciler) forkWorkspace(
 	for _, module := range modules.Items {
 		if module.Status.Phase != batchv1.ModulePhaseReady && module.Status.Phase != batchv1.ModulePhaseSleeped {
 			return fmt.Errorf(
-				"source module %s/%s is not ready (phase: %s), cannot fork yet. Will retry.",
+				"source module %s/%s is not ready (phase: %s), cannot fork yet, will retry",
 				module.Namespace, module.Name, module.Status.Phase,
 			)
 		}
@@ -46,7 +46,7 @@ func (r *WorkspaceReconciler) forkWorkspace(
 			resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
 			if resource == "" {
 				return fmt.Errorf(
-					"source module %s/%s with ExistingHelmRelease source is missing required annotation, cannot fork yet. Will retry.",
+					"source module %s/%s with ExistingHelmRelease source is missing required annotation, cannot fork yet, will retry",
 					module.Namespace, module.Name,
 				)
 			}
