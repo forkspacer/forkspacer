@@ -159,15 +159,6 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 		return fmt.Errorf("failed to get workspace for module %s/%s: %v", module.Namespace, module.Name, err)
 	}
 
-	// If workspace is being deleted, skip uninstall to prevent deadlock
-	if workspace.DeletionTimestamp != nil {
-		log.Info("workspace is being deleted, skipping uninstall for module",
-			"module", module.Name,
-			"namespace", module.Namespace,
-			"workspace", workspace.Name)
-		return nil
-	}
-
 	if !workspace.Status.Ready {
 		return fmt.Errorf("workspace not ready: workspace %s/%s is not ready", workspace.Namespace, workspace.Name)
 	}
