@@ -531,6 +531,8 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 	annotations := map[string]string{
 		kubernetesCons.ModuleAnnotationKeys.Resource:    string(helmResourceYAML),
 		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
+		"forkspacer.com/adopted-release":                "true",
+		"forkspacer.com/release-name":                   release.Name,
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())
