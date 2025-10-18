@@ -549,7 +549,8 @@ func (r *ModuleReconciler) ensureNamespace(
 			return nil
 		},
 		func(customModule resources.CustomModule) error {
-			targetNamespace = customModule.Spec.Namespace
+			// Custom modules don't have a namespace field
+			// Skip namespace creation for custom modules
 			return nil
 		},
 	)

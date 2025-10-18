@@ -442,12 +442,8 @@ func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix str
 			return nil
 		},
 		func(customModule resources.CustomModule) error {
-			customModule.Spec.Namespace = prefix + customModule.Spec.Namespace
-			updatedData, err := yaml.Marshal(customModule)
-			if err != nil {
-				return fmt.Errorf("failed to marshal updated Custom module: %w", err)
-			}
-			moduleData = updatedData
+			// Custom modules don't have a namespace field
+			// No prefix needed for custom modules
 			return nil
 		},
 	)
