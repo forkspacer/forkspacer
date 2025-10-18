@@ -429,21 +429,23 @@ func (r *WorkspaceReconciler) migrateConfigMaps(
 // applyNamespacePrefix applies a namespace prefix to module resources
 func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix string) ([]byte, error) {
 	configMap := make(map[string]any)
+	var updatedData []byte
 
 	// Parse the module to extract and modify the namespace
 	err := resources.HandleResource(moduleData, &configMap,
 		func(helmModule resources.HelmModule) error {
 			helmModule.Spec.Namespace = prefix + helmModule.Spec.Namespace
-			updatedData, err := yaml.Marshal(helmModule)
+			data, err := yaml.Marshal(helmModule)
 			if err != nil {
 				return fmt.Errorf("failed to marshal updated Helm module: %w", err)
 			}
-			moduleData = updatedData
+			updatedData = data
 			return nil
 		},
 		func(customModule resources.CustomModule) error {
 			// Custom modules don't have a namespace field
 			// No prefix needed for custom modules
+			updatedData = moduleData
 			return nil
 		},
 	)
@@ -451,5 +453,5 @@ func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix str
 		return nil, fmt.Errorf("failed to apply namespace prefix: %w", err)
 	}
 
-	return moduleData, nil
+	return updatedData, nil
 }
