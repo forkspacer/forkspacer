@@ -92,7 +92,22 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					return
 				}
 
-				resourceJSON, err := yaml.YAMLToJSON([]byte(resource))
+				// Apply namespace prefix if specified
+				resourceData := []byte(resource)
+				if destWorkspace.Spec.NamespacePrefix != "" {
+					resourceData, err = r.applyNamespacePrefix(resourceData, destWorkspace.Spec.NamespacePrefix)
+					if err != nil {
+						log.Error(err,
+							"Failed to apply namespace prefix to module resource",
+							"module_name", module.Name,
+							"module_namespace", module.Namespace,
+							"prefix", destWorkspace.Spec.NamespacePrefix,
+						)
+						return
+					}
+				}
+
+				resourceJSON, err := yaml.YAMLToJSON(resourceData)
 				if err != nil {
 					log.Error(err,
 						"Failed to parse resource annotation YAML to JSON",
@@ -108,6 +123,11 @@ func (r *WorkspaceReconciler) forkWorkspace(
 				newModule.Spec.Source.Github = nil
 				newModule.Spec.Source.HttpURL = nil
 				newModule.Spec.Config = nil
+			}
+
+			// Set createNamespace flag if workspace has it enabled
+			if destWorkspace.Spec.CreateNamespace {
+				newModule.Spec.CreateNamespace = true
 			}
 
 			if err = r.Create(ctx, newModule); err != nil {
@@ -404,4 +424,36 @@ func (r *WorkspaceReconciler) migrateConfigMaps(
 	}
 
 	return nil
+}
+
+// applyNamespacePrefix applies a namespace prefix to module resources
+func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix string) ([]byte, error) {
+	configMap := make(map[string]any)
+
+	// Parse the module to extract and modify the namespace
+	err := resources.HandleResource(moduleData, &configMap,
+		func(helmModule resources.HelmModule) error {
+			helmModule.Spec.Namespace = prefix + helmModule.Spec.Namespace
+			updatedData, err := yaml.Marshal(helmModule)
+			if err != nil {
+				return fmt.Errorf("failed to marshal updated Helm module: %w", err)
+			}
+			moduleData = updatedData
+			return nil
+		},
+		func(customModule resources.CustomModule) error {
+			customModule.Spec.Namespace = prefix + customModule.Spec.Namespace
+			updatedData, err := yaml.Marshal(customModule)
+			if err != nil {
+				return fmt.Errorf("failed to marshal updated Custom module: %w", err)
+			}
+			moduleData = updatedData
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply namespace prefix: %w", err)
+	}
+
+	return moduleData, nil
 }
