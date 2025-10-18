@@ -27,6 +27,7 @@ func (s *SecretMigrationService) MigrateSecret(
 	sourceSecretName, sourceSecretNamespace string,
 	destConfig *clientcmdapi.Config,
 	destSecretName, destSecretNamespace string,
+	destReleaseName string,
 ) error {
 	sourceRestConfig, err := clientcmd.NewDefaultClientConfig(*sourceConfig, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
@@ -55,6 +56,24 @@ func (s *SecretMigrationService) MigrateSecret(
 		return fmt.Errorf("failed to get source secret %s/%s: %w", sourceSecretNamespace, sourceSecretName, err)
 	}
 
+	// Helper to update Helm annotations with new release name
+	updateHelmAnnotations := func(annotations map[string]string) map[string]string {
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		updatedAnnotations := make(map[string]string)
+		for k, v := range annotations {
+			updatedAnnotations[k] = v
+		}
+		// Update Helm release name annotation if present and destReleaseName is provided
+		if destReleaseName != "" {
+			if _, ok := updatedAnnotations["meta.helm.sh/release-name"]; ok {
+				updatedAnnotations["meta.helm.sh/release-name"] = destReleaseName
+			}
+		}
+		return updatedAnnotations
+	}
+
 	destSecret, err := destClientset.CoreV1().Secrets(destSecretNamespace).Get(ctx, destSecretName, metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -66,7 +85,7 @@ func (s *SecretMigrationService) MigrateSecret(
 				Name:        destSecretName,
 				Namespace:   destSecretNamespace,
 				Labels:      sourceSecret.Labels,
-				Annotations: sourceSecret.Annotations,
+				Annotations: updateHelmAnnotations(sourceSecret.Annotations),
 			},
 			Type:       sourceSecret.Type,
 			Data:       sourceSecret.Data,
@@ -87,7 +106,7 @@ func (s *SecretMigrationService) MigrateSecret(
 			"name", destSecretName, "namespace", destSecretNamespace)
 
 		preservedLabels := destSecret.Labels
-		preservedAnnotations := destSecret.Annotations
+		preservedAnnotations := updateHelmAnnotations(destSecret.Annotations)
 
 		err = destClientset.CoreV1().Secrets(destSecretNamespace).Delete(ctx, destSecretName, metav1.DeleteOptions{})
 		if err != nil {
@@ -125,6 +144,7 @@ func (s *SecretMigrationService) MigrateSecret(
 	destSecret.Data = sourceSecret.Data
 	destSecret.StringData = sourceSecret.StringData
 	destSecret.Type = sourceSecret.Type
+	destSecret.Annotations = updateHelmAnnotations(destSecret.Annotations)
 
 	_, err = destClientset.CoreV1().Secrets(destSecretNamespace).Update(ctx, destSecret, metav1.UpdateOptions{})
 	if err != nil {

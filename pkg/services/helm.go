@@ -139,7 +139,21 @@ func (service HelmService) InstallFromRepository(
 	wait bool,
 	helmValues []resources.HelmValues,
 ) error {
-	actionClient := action.NewInstall(service.actionConfig)
+	// Create a namespace-specific action configuration to avoid using the shared one with hardcoded "default"
+	actionConfig := new(action.Configuration)
+	if err := actionConfig.Init(
+		&helmConfigFlags{
+			config:    service.kubernetesConfig,
+			namespace: namespace,
+		},
+		namespace,
+		os.Getenv("HELM_DRIVER"),
+		func(format string, v ...any) {}, // no-op debug logger
+	); err != nil {
+		return fmt.Errorf("failed to initialize action config for namespace '%s': %w", namespace, err)
+	}
+
+	actionClient := action.NewInstall(actionConfig)
 	actionClient.Namespace = namespace
 	actionClient.CreateNamespace = true
 	actionClient.RepoURL = repoURL
@@ -182,7 +196,21 @@ func (service HelmService) InstallFromLocal(
 	wait bool,
 	helmValues []resources.HelmValues,
 ) error {
-	actionClient := action.NewInstall(service.actionConfig)
+	// Create a namespace-specific action configuration to avoid using the shared one with hardcoded "default"
+	actionConfig := new(action.Configuration)
+	if err := actionConfig.Init(
+		&helmConfigFlags{
+			config:    service.kubernetesConfig,
+			namespace: namespace,
+		},
+		namespace,
+		os.Getenv("HELM_DRIVER"),
+		func(format string, v ...any) {}, // no-op debug logger
+	); err != nil {
+		return fmt.Errorf("failed to initialize action config for namespace '%s': %w", namespace, err)
+	}
+
+	actionClient := action.NewInstall(actionConfig)
 	actionClient.Namespace = namespace
 	actionClient.CreateNamespace = true
 	actionClient.ReleaseName = releaseName
@@ -245,7 +273,21 @@ func (service HelmService) UninstallRelease(
 	releaseName, namespace string,
 	removeNamespace, removePVCs bool,
 ) error {
-	actionClient := action.NewUninstall(service.actionConfig)
+	// Create a namespace-specific action configuration
+	actionConfig := new(action.Configuration)
+	if err := actionConfig.Init(
+		&helmConfigFlags{
+			config:    service.kubernetesConfig,
+			namespace: namespace,
+		},
+		namespace,
+		os.Getenv("HELM_DRIVER"),
+		func(format string, v ...any) {}, // no-op debug logger
+	); err != nil {
+		return fmt.Errorf("failed to initialize action config for namespace '%s': %w", namespace, err)
+	}
+
+	actionClient := action.NewUninstall(actionConfig)
 	actionClient.Wait = true
 	actionClient.Timeout = 5 * time.Minute
 	actionClient.IgnoreNotFound = true

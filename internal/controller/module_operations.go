@@ -455,16 +455,27 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		return errors.New("unsupported chart source type for existing Helm release")
 	}
 
-	// Merge override values with existing release values
-	finalValues := release.Config
+	// Capture all effective values from the release (chart defaults + user-supplied)
+	// This ensures forked modules use the exact same configuration as the source
+	finalValues := make(map[string]any)
+
+	// Start with chart default values
+	if release.Chart != nil && release.Chart.Values != nil {
+		finalValues = release.Chart.Values
+	}
+
+	// Merge user-supplied values from the release (takes precedence over chart defaults)
+	if len(release.Config) > 0 {
+		finalValues = chartutil.CoalesceTables(release.Config, finalValues)
+	}
+
+	// Finally, apply any additional override values from the Module spec (takes highest precedence)
 	if ref.Values != nil && ref.Values.Raw != nil {
 		var overrideValues map[string]any
 		if err := json.Unmarshal(ref.Values.Raw, &overrideValues); err != nil {
 			return fmt.Errorf("failed to unmarshal override values: %w", err)
 		}
-
-		// Merge: override values take precedence over existing values
-		finalValues = chartutil.CoalesceTables(overrideValues, release.Config)
+		finalValues = chartutil.CoalesceTables(overrideValues, finalValues)
 	}
 
 	// Build values array - only include if there are actual values

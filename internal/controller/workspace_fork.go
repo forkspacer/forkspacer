@@ -270,7 +270,9 @@ func (r *WorkspaceReconciler) migrateModuleData(
 	}
 
 	// Perform Secret migration
-	if err := r.migrateSecrets(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
+	if err := r.migrateSecrets(
+		ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace, destModule,
+	); err != nil {
 		return fmt.Errorf("failed to migrate Secrets: %w", err)
 	}
 
@@ -335,6 +337,7 @@ func (r *WorkspaceReconciler) migrateSecrets(
 	ctx context.Context,
 	sourceHelmModule, destHelmModule resources.HelmModule,
 	sourceWorkspace, destWorkspace *batchv1.Workspace,
+	destModule *batchv1.Module,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -361,11 +364,15 @@ func (r *WorkspaceReconciler) migrateSecrets(
 		return fmt.Errorf("failed to get source kubeconfig: %w", err)
 	}
 
+	// Generate destination release name
+	destReleaseName := newHelmReleaseNameFromModule(*destModule)
+
 	// Migrate each Secret
 	for i, sourceSecretName := range sourceHelmModule.Spec.Migration.Secret.Names {
 		if err := secretMigrationService.MigrateSecret(ctx,
 			sourceKubeConfig, sourceSecretName, sourceHelmModule.Spec.Namespace,
 			destKubeConfig, destHelmModule.Spec.Migration.Secret.Names[i], destHelmModule.Spec.Namespace,
+			destReleaseName,
 		); err != nil {
 			log.Error(err, "failed to migrate Secret",
 				"sourceSecret", sourceSecretName,
