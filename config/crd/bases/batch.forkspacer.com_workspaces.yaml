@@ -144,7 +144,7 @@ spec:
                   Example: "staging-" will deploy modules to "staging-default", "staging-database", etc.
                 maxLength: 53
                 minLength: 1
-                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                pattern: ^[a-z0-9][-a-z0-9]*$
                 type: string
               type:
                 default: kubernetes

@@ -124,7 +124,7 @@ type WorkspaceSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=53
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][-a-z0-9]*$`
 	NamespacePrefix string `json:"namespacePrefix,omitempty"`
 
 	// CreateNamespace specifies whether to auto-create prefixed namespaces.
