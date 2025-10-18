@@ -61,6 +61,12 @@ spec:
               config:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              createNamespace:
+                default: false
+                description: |-
+                  CreateNamespace specifies whether to create the target namespace if it doesn't exist.
+                  Similar to ArgoCD's syncOptions.CreateNamespace.
+                type: boolean
               hibernated:
                 default: false
                 type: boolean

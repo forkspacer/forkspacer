@@ -108,6 +108,12 @@ spec:
                 required:
                 - type
                 type: object
+              createNamespace:
+                default: false
+                description: |-
+                  CreateNamespace specifies whether to auto-create prefixed namespaces.
+                  Only applies when NamespacePrefix is set.
+                type: boolean
               from:
                 maxProperties: 3
                 properties:
@@ -131,6 +137,15 @@ spec:
               hibernated:
                 default: false
                 type: boolean
+              namespacePrefix:
+                description: |-
+                  NamespacePrefix prefixes all module deployment namespaces.
+                  Useful for forking workspaces to avoid resource conflicts.
+                  Example: "staging-" will deploy modules to "staging-default", "staging-database", etc.
+                maxLength: 53
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
               type:
                 default: kubernetes
                 enum:
