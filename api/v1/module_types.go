@@ -213,6 +213,10 @@ type ModuleStatus struct {
 
 	Phase ModulePhaseType `json:"phase"`
 
+	// Source indicates how this module is managed (e.g., "Adopted/Helm", "Managed/Git")
+	// +optional
+	Source string `json:"source,omitempty"`
+
 	// +optional
 	LastActivity *metav1.Time `json:"lastActivity,omitempty"`
 
@@ -224,6 +228,7 @@ type ModuleStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=mo
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.source",name=Source,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.workspace.namespace",name=Workspace NS,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.workspace.name",name=Workspace Name,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.lastActivity",name=Last Activity,type=string,format=date-time

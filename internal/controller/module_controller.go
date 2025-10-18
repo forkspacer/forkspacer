@@ -266,6 +266,7 @@ func (r *ModuleReconciler) setPhase(
 
 			module.Status = batchv1.ModuleStatus{
 				Phase:        phase,
+				Source:       getModuleSourceType(module),
 				LastActivity: &metav1.Time{Time: time.Now()},
 				Message:      message,
 			}
