@@ -355,11 +355,43 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 		r.Recorder.Event(workspace, "Normal", "VirtualClusterInstalled",
 			"Successfully installed virtual cluster for managed workspace")
 
-		// For managed workspaces, return after installation to allow next reconciliation
-		// to verify vcluster is ready before transitioning to ready phase
+		// For managed workspaces, set to ready and handle forking if needed
 		if err := r.setPhaseReady(ctx, workspace, nil); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Handle forking for managed workspaces
+		if workspace.Spec.From != nil {
+			fromWorkspace := &batchv1.Workspace{}
+			if err := r.Get(ctx,
+				client.ObjectKey{
+					Namespace: workspace.Spec.From.Namespace,
+					Name:      workspace.Spec.From.Name,
+				}, fromWorkspace,
+			); err != nil {
+				r.Recorder.Event(workspace, "Warning", "ForkError",
+					fmt.Sprintf("Failed to get source workspace %s/%s: %s",
+						workspace.Spec.From.Namespace, workspace.Spec.From.Name, err.Error()))
+				if err := r.setPhaseFailed(
+					ctx, workspace,
+					utils.ToPtr("Failed to fork workspace. Check events for more information."),
+				); err != nil {
+					log.Error(err, "failed to update workspace status to Failed after fork error")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, fmt.Errorf("failed to get source workspace %s/%s: %w",
+					workspace.Spec.From.Namespace, workspace.Spec.From.Name, err)
+			}
+
+			if err := r.forkWorkspace(ctx, fromWorkspace, workspace); err != nil {
+				log.Info("fork workspace failed, will retry",
+					"source_workspace", fmt.Sprintf("%s/%s", fromWorkspace.Namespace, fromWorkspace.Name),
+					"dest_workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
+					"error", err.Error())
+				return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+			}
+		}
+
 		return ctrl.Result{}, nil
 	}
 
