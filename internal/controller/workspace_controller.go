@@ -456,24 +456,8 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 	r.removeSleepCron(workspace.UID)
 	r.removeResumeCron(workspace.UID)
 
-	// Uninstall vcluster for managed workspaces
-	if workspace.Spec.Type == batchv1.WorkspaceTypeManaged {
-		log.Info("Cleaning up managed workspace",
-			"workspace", workspace.Name,
-			"namespace", workspace.Namespace)
-
-		if err := r.uninstallVCluster(ctx, workspace); err != nil {
-			log.Error(err, "failed to uninstall vcluster for managed workspace")
-			r.Recorder.Event(workspace, "Warning", "VClusterUninstallError",
-				fmt.Sprintf("Failed to uninstall vcluster: %v", err))
-			// Continue with deletion even if vcluster uninstall fails
-		} else {
-			r.Recorder.Event(workspace, "Normal", "VClusterUninstalled",
-				"Successfully uninstalled vcluster for managed workspace")
-		}
-	}
-
-	// Delete all modules and wait for deletion with timeout
+	// Delete all modules first and wait for deletion with timeout
+	// This must happen BEFORE uninstalling vcluster so modules can cleanly uninstall
 	for _, module := range modules.Items {
 		moduleCopy := module // Avoid loop variable capture
 
@@ -508,6 +492,23 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 			r.Recorder.Event(workspace, "Warning", "ModuleDeletionTimeout",
 				fmt.Sprintf("Module %s/%s deletion timed out. Manual cleanup may be required.",
 					moduleCopy.Namespace, moduleCopy.Name))
+		}
+	}
+
+	// Now uninstall vcluster for managed workspaces after all modules are deleted
+	if workspace.Spec.Type == batchv1.WorkspaceTypeManaged {
+		log.Info("Cleaning up managed workspace",
+			"workspace", workspace.Name,
+			"namespace", workspace.Namespace)
+
+		if err := r.uninstallVCluster(ctx, workspace); err != nil {
+			log.Error(err, "failed to uninstall vcluster for managed workspace")
+			r.Recorder.Event(workspace, "Warning", "VClusterUninstallError",
+				fmt.Sprintf("Failed to uninstall vcluster: %v", err))
+			// Continue with deletion even if vcluster uninstall fails
+		} else {
+			r.Recorder.Event(workspace, "Normal", "VClusterUninstalled",
+				"Successfully uninstalled vcluster for managed workspace")
 		}
 	}
 
