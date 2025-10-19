@@ -20,11 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:Enum=ready;hibernated;failed;terminating
+// +kubebuilder:validation:Enum=ready;installing;hibernated;failed;terminating
 type WorkspacePhase string
 
 const (
 	WorkspacePhaseReady       WorkspacePhase = "ready"
+	WorkspacePhaseInstalling  WorkspacePhase = "installing"
 	WorkspacePhaseHibernated  WorkspacePhase = "hibernated"
 	WorkspacePhaseFailed      WorkspacePhase = "failed"
 	WorkspacePhaseTerminating WorkspacePhase = "terminating"
