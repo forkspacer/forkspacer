@@ -165,6 +165,31 @@ spec:
                           repository:
                             description: Repository-based chart (e.g., from Helm repository)
                             properties:
+                              auth:
+                                description: Authentication credentials for private
+                                  chart repositories
+                                properties:
+                                  secretRef:
+                                    description: |-
+                                      Reference to a Secret containing chart repository credentials
+                                      username and password fields for basic auth
+                                    properties:
+                                      name:
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                      namespace:
+                                        default: default
+                                        maxLength: 63
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    - namespace
+                                    type: object
+                                required:
+                                - secretRef
+                                type: object
                               chart:
                                 minLength: 1
                                 type: string
