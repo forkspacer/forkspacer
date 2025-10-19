@@ -100,6 +100,10 @@ type ModuleSourceChartRepository struct {
 
 	// +optional
 	Version *string `json:"version,omitempty"`
+
+	// Authentication credentials for private chart repositories
+	// +optional
+	Auth *ModuleSourceChartRepositoryAuth `json:"auth,omitempty"`
 }
 
 // ModuleSourceChartGit defines a chart from a Git repository
@@ -134,6 +138,26 @@ type ModuleSourceChartGitAuth struct {
 }
 
 type ModuleSourceChartGitAuthSecretRef struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
+}
+
+// ModuleSourceChartRepositoryAuth defines authentication for Helm chart repositories
+type ModuleSourceChartRepositoryAuth struct {
+	// Reference to a Secret containing chart repository credentials
+	// username and password fields for basic auth
+	// +required
+	SecretRef *ModuleSourceChartRepositoryAuthSecretRef `json:"secretRef"`
+}
+
+type ModuleSourceChartRepositoryAuthSecretRef struct {
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
