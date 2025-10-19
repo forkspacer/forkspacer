@@ -30,11 +30,12 @@ const (
 	WorkspacePhaseTerminating WorkspacePhase = "terminating"
 )
 
-// +kubebuilder:validation:Enum=kubernetes
+// +kubebuilder:validation:Enum=kubernetes;managed
 type WorkspaceType string
 
 const (
 	WorkspaceTypeKubernetes WorkspaceType = "kubernetes"
+	WorkspaceTypeManaged    WorkspaceType = "managed"
 )
 
 // +kubebuilder:validation:Enum=local;in-cluster;kubeconfig
@@ -85,6 +86,31 @@ type WorkspaceAutoHibernation struct {
 	WakeSchedule *string `json:"wakeSchedule,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=vcluster;k3d;kind
+type ManagedClusterBackend string
+
+const (
+	ManagedClusterBackendVCluster ManagedClusterBackend = "vcluster"
+	ManagedClusterBackendK3d      ManagedClusterBackend = "k3d"
+	ManagedClusterBackendKind     ManagedClusterBackend = "kind"
+)
+
+// ManagedClusterSpec defines configuration for a Forkspacer-managed cluster
+type ManagedClusterSpec struct {
+	// Backend specifies which cluster technology to use
+	// Defaults to vcluster if not specified
+	// +optional
+	// +kubebuilder:default=vcluster
+	Backend ManagedClusterBackend `json:"backend,omitempty"`
+
+	// Distro specifies the Kubernetes distribution (for vcluster)
+	// Defaults to k3s if not specified
+	// +optional
+	// +kubebuilder:default=k3s
+	// +kubebuilder:validation:Enum=k3s;k0s;k8s;eks
+	Distro string `json:"distro,omitempty"`
+}
+
 // +kubebuilder:validation:MaxProperties=3
 type WorkspaceFromReference struct {
 	// +required
@@ -114,6 +140,10 @@ type WorkspaceSpec struct {
 
 	// +kubebuilder:default={type: "in-cluster"}
 	Connection WorkspaceConnection `json:"connection"`
+
+	// ManagedCluster configuration for workspace-managed clusters (type: managed)
+	// +optional
+	ManagedCluster *ManagedClusterSpec `json:"managedCluster,omitempty"`
 
 	// +optional
 	AutoHibernation *WorkspaceAutoHibernation `json:"autoHibernation,omitempty"`
