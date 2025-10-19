@@ -329,15 +329,6 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 			return ctrl.Result{}, err
 		}
 
-		// Setup connection configuration before installing vcluster
-		r.setupManagedWorkspaceConnection(workspace)
-
-		// Update workspace with connection configuration
-		if err := r.Update(ctx, workspace); err != nil {
-			log.Error(err, "failed to update workspace with connection configuration")
-			return ctrl.Result{}, err
-		}
-
 		// Install vcluster
 		if err := r.installVCluster(ctx, workspace); err != nil {
 			log.Error(err, "failed to install virtual cluster for managed workspace")

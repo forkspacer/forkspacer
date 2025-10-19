@@ -183,25 +183,3 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 
 	return nil
 }
-
-// setupManagedWorkspaceConnection configures the workspace connection to use vcluster's kubeconfig
-func (r *WorkspaceReconciler) setupManagedWorkspaceConnection(workspace *batchv1.Workspace) {
-	// Get vcluster configuration
-	_, _, _, secretNamePrefix := getVClusterConfig()
-
-	// Get dedicated namespace for this vcluster
-	vclusterNamespace := getVClusterNamespace(workspace)
-
-	// Generate unique secret name per workspace to avoid collisions
-	secretName := fmt.Sprintf("%s-%s", secretNamePrefix, workspace.Name)
-
-	// Set connection to use kubeconfig from the vcluster secret in the dedicated namespace
-	workspace.Spec.Connection = batchv1.WorkspaceConnection{
-		Type: batchv1.WorkspaceConnectionTypeKubeconfig,
-		SecretReference: &batchv1.WorkspaceConnectionSecretReference{
-			Name:      secretName,
-			Namespace: vclusterNamespace,
-			Key:       "config",
-		},
-	}
-}

@@ -83,6 +83,24 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		workspace.Status.LastActivity = &metav1.Time{Time: time.Now()}
 	}
 
+	// Setup connection for managed workspaces
+	if workspace.Spec.Type == batchv1.WorkspaceTypeManaged {
+		// Generate dedicated namespace and secret name for this managed workspace
+		vclusterNamespace := fmt.Sprintf("forkspacer-%s", workspace.Name)
+		secretNamePrefix := "vc-kubeconfig"
+		secretName := fmt.Sprintf("%s-%s", secretNamePrefix, workspace.Name)
+
+		// Set connection to use kubeconfig from the vcluster secret in the dedicated namespace
+		workspace.Spec.Connection = batchv1.WorkspaceConnection{
+			Type: batchv1.WorkspaceConnectionTypeKubeconfig,
+			SecretReference: &batchv1.WorkspaceConnectionSecretReference{
+				Name:      secretName,
+				Namespace: vclusterNamespace,
+				Key:       "config",
+			},
+		}
+	}
+
 	if workspace.Spec.From != nil {
 		fromWorkspace := &batchv1.Workspace{}
 		if err := d.Get(ctx,
@@ -228,8 +246,12 @@ func validateWorkspaceSpec(ctx context.Context, c client.Client, workspace *batc
 		}
 	}
 
-	if errs := validateWorkspaceSecretReference(ctx, c, workspace.Spec.Connection); errs != nil {
-		allErrs = append(allErrs, errs...)
+	// Skip secret validation for managed workspaces - the kubeconfig secret
+	// is created during vcluster installation by the controller
+	if workspace.Spec.Type != batchv1.WorkspaceTypeManaged {
+		if errs := validateWorkspaceSecretReference(ctx, c, workspace.Spec.Connection); errs != nil {
+			allErrs = append(allErrs, errs...)
+		}
 	}
 
 	return allErrs
