@@ -3,41 +3,52 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/resources"
-	"github.com/forkspacer/forkspacer/pkg/services"
-	"k8s.io/client-go/rest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const (
-	// vcluster chart configuration
-	vclusterChartRepo    = "https://charts.loft.sh"
-	vclusterChartVersion = "0.21.0-alpha.4"
-	vclusterChartName    = "vcluster"
+// getVClusterConfig returns vcluster configuration from environment variables with fallback defaults
+func getVClusterConfig() (chartRepo, chartVersion, chartName, secretName string) {
+	chartRepo = os.Getenv("VCLUSTER_CHART_REPO")
+	if chartRepo == "" {
+		chartRepo = "https://charts.loft.sh"
+	}
 
-	// vcluster kubeconfig secret name
-	vclusterKubeconfigSecretName = "vc-kubeconfig"
-)
+	chartVersion = os.Getenv("VCLUSTER_CHART_VERSION")
+	if chartVersion == "" {
+		chartVersion = "0.21.0-alpha.4"
+	}
+
+	chartName = os.Getenv("VCLUSTER_CHART_NAME")
+	if chartName == "" {
+		chartName = "vcluster"
+	}
+
+	secretName = os.Getenv("VCLUSTER_KUBECONFIG_SECRET_NAME")
+	if secretName == "" {
+		secretName = "vc-kubeconfig"
+	}
+
+	return
+}
 
 // installVCluster installs a vcluster for the managed workspace
 func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *batchv1.Workspace) error {
 	log := logf.FromContext(ctx)
 
-	// Get in-cluster config to install vcluster
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get in-cluster config: %w", err)
+	// Get vcluster configuration
+	chartRepo, chartVersion, chartName, secretName := getVClusterConfig()
+
+	// Use controller's own connection (works both locally and in-cluster)
+	controllerConnection := &batchv1.WorkspaceConnection{
+		Type: batchv1.WorkspaceConnectionTypeLocal,
 	}
 
-	// Create Helm service
-	helmService, err := services.NewHelmService(
-		restConfig,
-		func(format string, v ...any) {
-			log.V(1).Info(fmt.Sprintf(format, v))
-		},
-	)
+	// Create Helm service using controller's connection
+	helmService, err := NewHelmService(ctx, controllerConnection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to create Helm service: %w", err)
 	}
@@ -49,7 +60,7 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 	values := map[string]any{
 		"exportKubeConfig": map[string]any{
 			"secret": map[string]any{
-				"name": vclusterKubeconfigSecretName,
+				"name": secretName,
 			},
 			"server": fmt.Sprintf("https://%s.%s:443", releaseName, workspace.Namespace),
 		},
@@ -63,16 +74,17 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 	log.Info("installing vcluster",
 		"workspace", workspace.Name,
 		"namespace", workspace.Namespace,
-		"release", releaseName)
+		"release", releaseName,
+		"chartRepo", chartRepo,
+		"chartVersion", chartVersion)
 
-	version := vclusterChartVersion
 	if err := helmService.InstallFromRepository(
 		ctx,
-		vclusterChartName,
+		chartName,
 		releaseName,
 		workspace.Namespace,
-		vclusterChartRepo,
-		&version,
+		chartRepo,
+		&chartVersion,
 		true, // wait for vcluster to be ready
 		[]resources.HelmValues{{Raw: values}},
 	); err != nil {
@@ -91,19 +103,13 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *batchv1.Workspace) error {
 	log := logf.FromContext(ctx)
 
-	// Get in-cluster config
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get in-cluster config: %w", err)
+	// Use controller's own connection (works both locally and in-cluster)
+	controllerConnection := &batchv1.WorkspaceConnection{
+		Type: batchv1.WorkspaceConnectionTypeLocal,
 	}
 
-	// Create Helm service
-	helmService, err := services.NewHelmService(
-		restConfig,
-		func(format string, v ...any) {
-			log.V(1).Info(fmt.Sprintf(format, v))
-		},
-	)
+	// Create Helm service using controller's connection
+	helmService, err := NewHelmService(ctx, controllerConnection, r.Client)
 	if err != nil {
 		return fmt.Errorf("failed to create Helm service: %w", err)
 	}
@@ -137,11 +143,14 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 
 // setupManagedWorkspaceConnection configures the workspace connection to use vcluster's kubeconfig
 func (r *WorkspaceReconciler) setupManagedWorkspaceConnection(workspace *batchv1.Workspace) {
+	// Get vcluster configuration
+	_, _, _, secretName := getVClusterConfig()
+
 	// Set connection to use kubeconfig from the vcluster secret
 	workspace.Spec.Connection = batchv1.WorkspaceConnection{
 		Type: batchv1.WorkspaceConnectionTypeKubeconfig,
 		SecretReference: &batchv1.WorkspaceConnectionSecretReference{
-			Name:      vclusterKubeconfigSecretName,
+			Name:      secretName,
 			Namespace: workspace.Namespace,
 			Key:       "config",
 		},
