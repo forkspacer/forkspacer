@@ -320,6 +320,11 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 			"workspace", workspace.Name,
 			"namespace", workspace.Namespace)
 
+		// Set phase to installing
+		if err := r.setPhaseInstalling(ctx, workspace, utils.ToPtr("Installing virtual cluster")); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		// Setup connection configuration before installing vcluster
 		r.setupManagedWorkspaceConnection(workspace)
 
@@ -331,20 +336,20 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 
 		// Install vcluster
 		if err := r.installVCluster(ctx, workspace); err != nil {
-			log.Error(err, "failed to install vcluster for managed workspace")
-			r.Recorder.Event(workspace, "Warning", "VClusterInstallError",
-				fmt.Sprintf("Failed to install vcluster: %v", err))
+			log.Error(err, "failed to install virtual cluster for managed workspace")
+			r.Recorder.Event(workspace, "Warning", "VirtualClusterInstallError",
+				fmt.Sprintf("Failed to install virtual cluster: %v", err))
 			if err := r.setPhaseFailed(
 				ctx, workspace,
-				utils.ToPtr("Failed to install vcluster. Check events for more information."),
+				utils.ToPtr("Failed to install virtual cluster. Check events for more information."),
 			); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, err
 		}
 
-		r.Recorder.Event(workspace, "Normal", "VClusterInstalled",
-			"Successfully installed vcluster for managed workspace")
+		r.Recorder.Event(workspace, "Normal", "VirtualClusterInstalled",
+			"Successfully installed virtual cluster for managed workspace")
 	}
 
 	log.Info("New workspace detected, setting initial status")
@@ -771,6 +776,31 @@ func (r *WorkspaceReconciler) setPhaseHibernated(
 				Ready:        true,
 				LastActivity: &metav1.Time{Time: time.Now()},
 				HibernatedAt: &metav1.Time{Time: time.Now()},
+				Message:      message,
+			}
+
+			return r.Status().Update(ctx, workspace)
+		},
+	)
+}
+
+func (r *WorkspaceReconciler) setPhaseInstalling(
+	ctx context.Context,
+	workspace *batchv1.Workspace,
+	message *string,
+) error {
+	return retry.RetryOnConflict(
+		retry.DefaultRetry,
+		func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(workspace), workspace); err != nil {
+				return err
+			}
+
+			workspace.Status = batchv1.WorkspaceStatus{
+				Phase:        batchv1.WorkspacePhaseInstalling,
+				Ready:        false,
+				LastActivity: &metav1.Time{Time: time.Now()},
+				HibernatedAt: nil,
 				Message:      message,
 			}
 
