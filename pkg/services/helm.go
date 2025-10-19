@@ -138,6 +138,7 @@ func (service HelmService) InstallFromRepository(
 	version *string,
 	wait bool,
 	helmValues []resources.HelmValues,
+	username, password string,
 ) error {
 	// Create a namespace-specific action configuration to avoid using the shared one with hardcoded "default"
 	actionConfig := new(action.Configuration)
@@ -163,6 +164,12 @@ func (service HelmService) InstallFromRepository(
 	}
 	actionClient.Wait = wait
 	actionClient.Timeout = 5 * time.Minute
+
+	// Configure repository authentication if credentials provided
+	if username != "" || password != "" {
+		actionClient.Username = username
+		actionClient.Password = password
+	}
 
 	mergedValues, err := service.MergeHelmValues(ctx, helmValues)
 	if err != nil {

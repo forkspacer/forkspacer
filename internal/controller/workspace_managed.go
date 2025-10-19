@@ -112,6 +112,8 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 		&chartVersion,
 		true, // wait for vcluster to be ready
 		[]resources.HelmValues{{Raw: values}},
+		"", // no username for public vcluster repo
+		"", // no password for public vcluster repo
 	); err != nil {
 		return fmt.Errorf("failed to install vcluster: %w", err)
 	}

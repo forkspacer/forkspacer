@@ -27,10 +27,27 @@ func (resource HelmValues) Validate() error {
 	return nil
 }
 
+type HelmModuleSpecChartRepoAuth struct {
+	SecretRef *ResourceIndetifier `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
+}
+
+func (resource HelmModuleSpecChartRepoAuth) Validate() error {
+	if resource.SecretRef == nil {
+		return fmt.Errorf("HelmModuleSpecChartRepoAuth must specify SecretRef")
+	}
+
+	if err := resource.SecretRef.Validate(); err != nil {
+		return fmt.Errorf("HelmModuleSpecChartRepoAuth SecretRef validation failed: %w", err)
+	}
+
+	return nil
+}
+
 type HelmModuleSpecChartRepo struct {
-	URL       string  `yaml:"url" json:"url"`
-	ChartName string  `yaml:"chartName" json:"chartName"`
-	Version   *string `yaml:"version,omitempty" json:"version,omitempty"`
+	URL       string                       `yaml:"url" json:"url"`
+	ChartName string                       `yaml:"chartName" json:"chartName"`
+	Version   *string                      `yaml:"version,omitempty" json:"version,omitempty"`
+	Auth      *HelmModuleSpecChartRepoAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
 }
 
 func (resource HelmModuleSpecChartRepo) Validate() error {
@@ -49,6 +66,12 @@ func (resource HelmModuleSpecChartRepo) Validate() error {
 
 	if resource.ChartName == "" {
 		return fmt.Errorf("HelmModuleSpecChartRepo ChartName cannot be empty")
+	}
+
+	if resource.Auth != nil {
+		if err := resource.Auth.Validate(); err != nil {
+			return fmt.Errorf("HelmModuleSpecChartRepo Auth validation failed: %w", err)
+		}
 	}
 
 	return nil

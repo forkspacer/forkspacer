@@ -51,6 +51,50 @@ func NewModuleHelmManager(
 	}, nil
 }
 
+// fetchRepoAuthCredentials retrieves username and password from a secret reference
+func (m ModuleHelmManager) fetchRepoAuthCredentials(
+	ctx context.Context,
+	auth *resources.HelmModuleSpecChartRepoAuth,
+) (username, password string, err error) {
+	if auth == nil || auth.SecretRef == nil {
+		return "", "", nil
+	}
+
+	secretNamespace := auth.SecretRef.Namespace
+	if secretNamespace == "" {
+		secretNamespace = "default"
+	}
+
+	secret := &corev1.Secret{}
+	if err := m.controllerClient.Get(ctx, types.NamespacedName{
+		Name:      auth.SecretRef.Name,
+		Namespace: secretNamespace,
+	}, secret); err != nil {
+		return "", "", fmt.Errorf("failed to fetch repository auth secret %s/%s: %w",
+			secretNamespace,
+			auth.SecretRef.Name,
+			err,
+		)
+	}
+
+	// Username is optional, password/token is required
+	if usernameBytes, ok := secret.Data[kubernetesCons.Helm.ChartRepoAuthSecretUsernameKey]; ok {
+		username = string(usernameBytes)
+	}
+
+	passwordBytes, ok := secret.Data[kubernetesCons.Helm.ChartRepoAuthSecretPasswordKey]
+	if !ok {
+		return "", "", fmt.Errorf("secret %s/%s does not contain '%s' data",
+			secretNamespace,
+			auth.SecretRef.Name,
+			kubernetesCons.Helm.ChartRepoAuthSecretPasswordKey,
+		)
+	}
+	password = string(passwordBytes)
+
+	return username, password, nil
+}
+
 func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) error {
 	namespace := m.helmModule.Spec.Namespace
 	if namespace == "" {
@@ -58,6 +102,12 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 	}
 
 	if m.helmModule.Spec.Chart.Repo != nil {
+		// Fetch repository authentication credentials if configured
+		username, password, err := m.fetchRepoAuthCredentials(ctx, m.helmModule.Spec.Chart.Repo.Auth)
+		if err != nil {
+			return err
+		}
+
 		if err := m.helmService.InstallFromRepository(
 			ctx,
 			m.helmModule.Spec.Chart.Repo.ChartName,
@@ -67,6 +117,8 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 			m.helmModule.Spec.Chart.Repo.Version,
 			true,
 			m.helmModule.Spec.Values,
+			username,
+			password,
 		); err != nil {
 			return err
 		}

@@ -33,11 +33,15 @@ var Helm = struct {
 	ValuesConfigMapKey,
 	ChartConfigMapKey,
 	ChartGitAuthHTTPSSecretUsernameKey,
-	ChartGitAuthHTTPSSecretTokenKey string
+	ChartGitAuthHTTPSSecretTokenKey,
+	ChartRepoAuthSecretUsernameKey,
+	ChartRepoAuthSecretPasswordKey string
 }{
 	DefaultNamespace:                   "default",
 	ValuesConfigMapKey:                 "values",
 	ChartConfigMapKey:                  "chart.tgz",
 	ChartGitAuthHTTPSSecretUsernameKey: "username",
 	ChartGitAuthHTTPSSecretTokenKey:    "token",
+	ChartRepoAuthSecretUsernameKey:     "username",
+	ChartRepoAuthSecretPasswordKey:     "password",
 }
