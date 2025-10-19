@@ -68,9 +68,9 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 		log.Info("created dedicated namespace", "namespace", vclusterNamespace)
 	}
 
-	// Use controller's own connection (works both locally and in-cluster)
+	// Use in-cluster connection to install vcluster
 	controllerConnection := &batchv1.WorkspaceConnection{
-		Type: batchv1.WorkspaceConnectionTypeLocal,
+		Type: batchv1.WorkspaceConnectionTypeInCluster,
 	}
 
 	// Create Helm service using controller's connection
@@ -133,9 +133,9 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 	// Get dedicated namespace for this vcluster
 	vclusterNamespace := getVClusterNamespace(workspace)
 
-	// Use controller's own connection (works both locally and in-cluster)
+	// Use in-cluster connection to install vcluster
 	controllerConnection := &batchv1.WorkspaceConnection{
-		Type: batchv1.WorkspaceConnectionTypeLocal,
+		Type: batchv1.WorkspaceConnectionTypeInCluster,
 	}
 
 	// Create Helm service using controller's connection
