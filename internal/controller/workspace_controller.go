@@ -115,6 +115,10 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		return r.handleAutoHibernation(ctx, workspace), nil
 
+	case batchv1.WorkspacePhaseInstalling:
+		// Requeue to check installation progress
+		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+
 	case batchv1.WorkspacePhaseFailed, batchv1.WorkspacePhaseTerminating:
 		return ctrl.Result{}, nil
 
