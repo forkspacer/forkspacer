@@ -64,10 +64,6 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 			},
 			"server": fmt.Sprintf("https://%s.%s:443", releaseName, workspace.Namespace),
 		},
-		// Use k3s as default distro (lightweight and fast)
-		"vcluster": map[string]any{
-			"image": "rancher/k3s:v1.31.3-k3s1",
-		},
 	}
 
 	// Install vcluster
