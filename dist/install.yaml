@@ -28,6 +28,15 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.source
+      name: Source
+      type: string
+    - jsonPath: .spec.workspace.namespace
+      name: Workspace NS
+      type: string
+    - jsonPath: .spec.workspace.name
+      name: Workspace Name
+      type: string
     - format: date-time
       jsonPath: .status.lastActivity
       name: Last Activity
@@ -63,6 +72,12 @@ spec:
               config:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              createNamespace:
+                default: false
+                description: |-
+                  CreateNamespace specifies whether to create the target namespace if it doesn't exist.
+                  Similar to ArgoCD's syncOptions.CreateNamespace.
+                type: boolean
               hibernated:
                 default: false
                 type: boolean
@@ -70,6 +85,9 @@ spec:
                 properties:
                   configMap:
                     properties:
+                      key:
+                        minLength: 1
+                        type: string
                       name:
                         maxLength: 253
                         minLength: 1
@@ -92,6 +110,9 @@ spec:
                         properties:
                           configMap:
                             properties:
+                              key:
+                                minLength: 1
+                                type: string
                               name:
                                 maxLength: 253
                                 minLength: 1
@@ -112,11 +133,10 @@ spec:
                                 description: Authentication credentials for private
                                   repositories
                                 properties:
-                                  secretRef:
+                                  httpsSecretRef:
                                     description: |-
                                       Reference to a Secret containing Git credentials
-                                      For HTTPS: username and password/token fields
-                                      For SSH: sshPrivateKey field
+                                      username and token fields
                                     properties:
                                       name:
                                         maxLength: 253
@@ -131,8 +151,6 @@ spec:
                                     - name
                                     - namespace
                                     type: object
-                                required:
-                                - secretRef
                                 type: object
                               path:
                                 description: Path to the chart directory containing
@@ -145,15 +163,13 @@ spec:
                                 type: string
                               revision:
                                 default: main
-                                description: Git revision (branch, tag, or commit
-                                  SHA)
+                                description: Git revision (branch, tag)
                                 type: string
                             required:
                             - path
                             - repo
+                            - revision
                             type: object
-                          httpURL:
-                            type: string
                           repository:
                             description: Repository-based chart (e.g., from Helm repository)
                             properties:
@@ -179,6 +195,12 @@ spec:
                         maxLength: 63
                         minLength: 1
                         type: string
+                      values:
+                        description: |-
+                          Values allows overriding specific values from the existing release.
+                          These values will be merged with the existing release's values.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     required:
                     - chartSource
                     - name
@@ -298,6 +320,10 @@ spec:
                 - sleeped
                 - resuming
                 - failed
+                type: string
+              source:
+                description: Source indicates how this module is managed (e.g., "Adopted/Helm",
+                  "Managed/Git")
                 type: string
             required:
             - phase
@@ -419,6 +445,12 @@ spec:
                 required:
                 - type
                 type: object
+              createNamespace:
+                default: false
+                description: |-
+                  CreateNamespace specifies whether to auto-create prefixed namespaces.
+                  Only applies when NamespacePrefix is set.
+                type: boolean
               from:
                 maxProperties: 3
                 properties:
@@ -442,6 +474,15 @@ spec:
               hibernated:
                 default: false
                 type: boolean
+              namespacePrefix:
+                description: |-
+                  NamespacePrefix prefixes all module deployment namespaces.
+                  Useful for forking workspaces to avoid resource conflicts.
+                  Example: "staging-" will deploy modules to "staging-default", "staging-database", etc.
+                maxLength: 53
+                minLength: 1
+                pattern: ^[a-z0-9][-a-z0-9]*$
+                type: string
               type:
                 default: kubernetes
                 enum:
@@ -907,7 +948,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.11
+        image: ghcr.io/forkspacer/forkspacer:v0.1.12
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
