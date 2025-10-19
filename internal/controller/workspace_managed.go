@@ -40,7 +40,7 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 	log := logf.FromContext(ctx)
 
 	// Get vcluster configuration
-	chartRepo, chartVersion, chartName, secretName := getVClusterConfig()
+	chartRepo, chartVersion, chartName, secretNamePrefix := getVClusterConfig()
 
 	// Use controller's own connection (works both locally and in-cluster)
 	controllerConnection := &batchv1.WorkspaceConnection{
@@ -54,7 +54,10 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 	}
 
 	// Generate release name for vcluster
-	releaseName := fmt.Sprintf("vcluster-%s", workspace.Name)
+	releaseName := fmt.Sprintf("forkspacer-%s", workspace.Name)
+
+	// Generate unique secret name per workspace to avoid collisions
+	secretName := fmt.Sprintf("%s-%s", secretNamePrefix, workspace.Name)
 
 	// Configure vcluster values
 	values := map[string]any{
@@ -111,7 +114,7 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 	}
 
 	// Generate release name for vcluster
-	releaseName := fmt.Sprintf("vcluster-%s", workspace.Name)
+	releaseName := fmt.Sprintf("forkspacer-%s", workspace.Name)
 
 	log.Info("uninstalling vcluster",
 		"workspace", workspace.Name,
@@ -140,7 +143,10 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 // setupManagedWorkspaceConnection configures the workspace connection to use vcluster's kubeconfig
 func (r *WorkspaceReconciler) setupManagedWorkspaceConnection(workspace *batchv1.Workspace) {
 	// Get vcluster configuration
-	_, _, _, secretName := getVClusterConfig()
+	_, _, _, secretNamePrefix := getVClusterConfig()
+
+	// Generate unique secret name per workspace to avoid collisions
+	secretName := fmt.Sprintf("%s-%s", secretNamePrefix, workspace.Name)
 
 	// Set connection to use kubeconfig from the vcluster secret
 	workspace.Spec.Connection = batchv1.WorkspaceConnection{
