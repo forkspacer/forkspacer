@@ -143,6 +143,13 @@ certmanager:
 # [CERT-MANAGER]: cert-manager must be pre-installed
 # Install with: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 
+# [MANAGED WORKSPACES]: Configuration for managed workspace clusters
+managedWorkspaces:
+  vcluster:
+    # Chart version for vcluster (from https://charts.loft.sh)
+    chartVersion: "0.21.0-alpha.4"
+    chartRepo: "https://charts.loft.sh"
+
 # [NETWORK POLICIES]: To enable NetworkPolicies set true
 networkPolicy:
   enable: false

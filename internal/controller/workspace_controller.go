@@ -314,6 +314,39 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 		return ctrl.Result{}, err
 	}
 
+	// Handle managed workspace setup
+	if workspace.Spec.Type == batchv1.WorkspaceTypeManaged {
+		log.Info("Setting up managed workspace",
+			"workspace", workspace.Name,
+			"namespace", workspace.Namespace)
+
+		// Setup connection configuration before installing vcluster
+		r.setupManagedWorkspaceConnection(workspace)
+
+		// Update workspace with connection configuration
+		if err := r.Update(ctx, workspace); err != nil {
+			log.Error(err, "failed to update workspace with connection configuration")
+			return ctrl.Result{}, err
+		}
+
+		// Install vcluster
+		if err := r.installVCluster(ctx, workspace); err != nil {
+			log.Error(err, "failed to install vcluster for managed workspace")
+			r.Recorder.Event(workspace, "Warning", "VClusterInstallError",
+				fmt.Sprintf("Failed to install vcluster: %v", err))
+			if err := r.setPhaseFailed(
+				ctx, workspace,
+				utils.ToPtr("Failed to install vcluster. Check events for more information."),
+			); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+
+		r.Recorder.Event(workspace, "Normal", "VClusterInstalled",
+			"Successfully installed vcluster for managed workspace")
+	}
+
 	log.Info("New workspace detected, setting initial status")
 	if workspace.Spec.Hibernated {
 		if err := r.setPhaseHibernated(ctx, workspace, nil); err != nil {
@@ -383,6 +416,23 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, workspace *bat
 
 	r.removeSleepCron(workspace.UID)
 	r.removeResumeCron(workspace.UID)
+
+	// Uninstall vcluster for managed workspaces
+	if workspace.Spec.Type == batchv1.WorkspaceTypeManaged {
+		log.Info("Cleaning up managed workspace",
+			"workspace", workspace.Name,
+			"namespace", workspace.Namespace)
+
+		if err := r.uninstallVCluster(ctx, workspace); err != nil {
+			log.Error(err, "failed to uninstall vcluster for managed workspace")
+			r.Recorder.Event(workspace, "Warning", "VClusterUninstallError",
+				fmt.Sprintf("Failed to uninstall vcluster: %v", err))
+			// Continue with deletion even if vcluster uninstall fails
+		} else {
+			r.Recorder.Event(workspace, "Normal", "VClusterUninstalled",
+				"Successfully uninstalled vcluster for managed workspace")
+		}
+	}
 
 	// Delete all modules and wait for deletion with timeout
 	for _, module := range modules.Items {
