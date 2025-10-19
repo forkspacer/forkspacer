@@ -7,6 +7,9 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"github.com/forkspacer/forkspacer/pkg/resources"
+	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -35,12 +38,35 @@ func getVClusterConfig() (chartRepo, chartVersion, chartName, secretName string)
 	return
 }
 
+// getVClusterNamespace returns the dedicated namespace name for a workspace's vcluster
+func getVClusterNamespace(workspace *batchv1.Workspace) string {
+	return fmt.Sprintf("forkspacer-%s", workspace.Name)
+}
+
 // installVCluster installs a vcluster for the managed workspace
 func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *batchv1.Workspace) error {
 	log := logf.FromContext(ctx)
 
 	// Get vcluster configuration
 	chartRepo, chartVersion, chartName, secretNamePrefix := getVClusterConfig()
+
+	// Get dedicated namespace for this vcluster
+	vclusterNamespace := getVClusterNamespace(workspace)
+
+	// Create dedicated namespace if it doesn't exist
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vclusterNamespace,
+		},
+	}
+	if err := r.Create(ctx, ns); err != nil {
+		if !k8sErrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create namespace %s: %w", vclusterNamespace, err)
+		}
+		log.Info("namespace already exists", "namespace", vclusterNamespace)
+	} else {
+		log.Info("created dedicated namespace", "namespace", vclusterNamespace)
+	}
 
 	// Use controller's own connection (works both locally and in-cluster)
 	controllerConnection := &batchv1.WorkspaceConnection{
@@ -65,14 +91,14 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 			"secret": map[string]any{
 				"name": secretName,
 			},
-			"server": fmt.Sprintf("https://%s.%s:443", releaseName, workspace.Namespace),
+			"server": fmt.Sprintf("https://%s.%s:443", releaseName, vclusterNamespace),
 		},
 	}
 
 	// Install vcluster
 	log.Info("installing vcluster",
 		"workspace", workspace.Name,
-		"namespace", workspace.Namespace,
+		"vcluster_namespace", vclusterNamespace,
 		"release", releaseName,
 		"chartRepo", chartRepo,
 		"chartVersion", chartVersion)
@@ -81,7 +107,7 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 		ctx,
 		chartName,
 		releaseName,
-		workspace.Namespace,
+		vclusterNamespace,
 		chartRepo,
 		&chartVersion,
 		true, // wait for vcluster to be ready
@@ -92,7 +118,7 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 
 	log.Info("vcluster installed successfully",
 		"workspace", workspace.Name,
-		"namespace", workspace.Namespace,
+		"vcluster_namespace", vclusterNamespace,
 		"release", releaseName)
 
 	return nil
@@ -101,6 +127,9 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 // uninstallVCluster removes the vcluster for the managed workspace
 func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *batchv1.Workspace) error {
 	log := logf.FromContext(ctx)
+
+	// Get dedicated namespace for this vcluster
+	vclusterNamespace := getVClusterNamespace(workspace)
 
 	// Use controller's own connection (works both locally and in-cluster)
 	controllerConnection := &batchv1.WorkspaceConnection{
@@ -118,15 +147,15 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 
 	log.Info("uninstalling vcluster",
 		"workspace", workspace.Name,
-		"namespace", workspace.Namespace,
+		"vcluster_namespace", vclusterNamespace,
 		"release", releaseName)
 
 	// Uninstall vcluster
 	if err := helmService.UninstallRelease(
 		ctx,
 		releaseName,
-		workspace.Namespace,
-		false, // don't remove namespace
+		vclusterNamespace,
+		false, // don't remove namespace (we'll delete it manually)
 		false, // don't remove PVCs
 	); err != nil {
 		return fmt.Errorf("failed to uninstall vcluster: %w", err)
@@ -134,8 +163,23 @@ func (r *WorkspaceReconciler) uninstallVCluster(ctx context.Context, workspace *
 
 	log.Info("vcluster uninstalled successfully",
 		"workspace", workspace.Name,
-		"namespace", workspace.Namespace,
+		"vcluster_namespace", vclusterNamespace,
 		"release", releaseName)
+
+	// Delete the dedicated namespace
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vclusterNamespace,
+		},
+	}
+	if err := r.Delete(ctx, ns); err != nil {
+		if !k8sErrors.IsNotFound(err) {
+			log.Error(err, "failed to delete vcluster namespace", "namespace", vclusterNamespace)
+			return fmt.Errorf("failed to delete namespace %s: %w", vclusterNamespace, err)
+		}
+	} else {
+		log.Info("deleted vcluster namespace", "namespace", vclusterNamespace)
+	}
 
 	return nil
 }
@@ -145,15 +189,18 @@ func (r *WorkspaceReconciler) setupManagedWorkspaceConnection(workspace *batchv1
 	// Get vcluster configuration
 	_, _, _, secretNamePrefix := getVClusterConfig()
 
+	// Get dedicated namespace for this vcluster
+	vclusterNamespace := getVClusterNamespace(workspace)
+
 	// Generate unique secret name per workspace to avoid collisions
 	secretName := fmt.Sprintf("%s-%s", secretNamePrefix, workspace.Name)
 
-	// Set connection to use kubeconfig from the vcluster secret
+	// Set connection to use kubeconfig from the vcluster secret in the dedicated namespace
 	workspace.Spec.Connection = batchv1.WorkspaceConnection{
 		Type: batchv1.WorkspaceConnectionTypeKubeconfig,
 		SecretReference: &batchv1.WorkspaceConnectionSecretReference{
 			Name:      secretName,
-			Namespace: workspace.Namespace,
+			Namespace: vclusterNamespace,
 			Key:       "config",
 		},
 	}
