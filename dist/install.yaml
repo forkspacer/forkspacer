@@ -976,7 +976,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.13
+        image: ghcr.io/forkspacer/forkspacer:v0.1.14
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
