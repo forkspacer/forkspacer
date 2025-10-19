@@ -354,6 +354,13 @@ func (r *WorkspaceReconciler) handleEmptyPhase(
 
 		r.Recorder.Event(workspace, "Normal", "VirtualClusterInstalled",
 			"Successfully installed virtual cluster for managed workspace")
+
+		// For managed workspaces, return after installation to allow next reconciliation
+		// to verify vcluster is ready before transitioning to ready phase
+		if err := r.setPhaseReady(ctx, workspace, nil); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
 	log.Info("New workspace detected, setting initial status")
