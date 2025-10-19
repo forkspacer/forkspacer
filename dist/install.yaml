@@ -474,6 +474,32 @@ spec:
               hibernated:
                 default: false
                 type: boolean
+              managedCluster:
+                description: 'ManagedCluster configuration for workspace-managed clusters
+                  (type: managed)'
+                properties:
+                  backend:
+                    default: vcluster
+                    description: |-
+                      Backend specifies which cluster technology to use
+                      Defaults to vcluster if not specified
+                    enum:
+                    - vcluster
+                    - k3d
+                    - kind
+                    type: string
+                  distro:
+                    default: k3s
+                    description: |-
+                      Distro specifies the Kubernetes distribution (for vcluster)
+                      Defaults to k3s if not specified
+                    enum:
+                    - k3s
+                    - k0s
+                    - k8s
+                    - eks
+                    type: string
+                type: object
               namespacePrefix:
                 description: |-
                   NamespacePrefix prefixes all module deployment namespaces.
@@ -487,6 +513,7 @@ spec:
                 default: kubernetes
                 enum:
                 - kubernetes
+                - managed
                 type: string
             required:
             - connection
@@ -576,6 +603,7 @@ spec:
               phase:
                 enum:
                 - ready
+                - installing
                 - hibernated
                 - failed
                 - terminating
@@ -948,7 +976,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.12
+        image: ghcr.io/forkspacer/forkspacer:v0.1.14
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
