@@ -347,8 +347,6 @@ spec:
                 - failed
                 type: string
               source:
-                description: Source indicates how this module is managed (e.g., "Adopted/Helm",
-                  "Managed/Git")
                 type: string
             required:
             - phase

@@ -293,7 +293,7 @@ func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.Order
 		} else if output.ValueFrom != nil {
 			if output.ValueFrom.Secret != nil && output.ValueFrom.Secret.Name != "" && output.ValueFrom.Secret.Key != "" {
 				namespace := output.ValueFrom.Secret.Namespace
-				if namespace != "" {
+				if namespace == "" {
 					namespace = kubernetesCons.Helm.DefaultNamespace
 				}
 
@@ -303,7 +303,12 @@ func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.Order
 					output.ValueFrom.Secret.Key,
 				)
 				if err != nil {
-					m.log.Error(err, "")
+					m.log.Error(err, "Failed to get secret value for output",
+						"outputName", output.Name,
+						"secretNamespace", namespace,
+						"secretName", output.ValueFrom.Secret.Name,
+						"secretKey", output.ValueFrom.Secret.Key,
+					)
 					continue
 				}
 

@@ -150,10 +150,8 @@ func (r *ModuleReconciler) uninstallModule(ctx context.Context, module *batchv1.
 	log := logf.FromContext(ctx)
 
 	// Skip uninstallation for adopted releases - just detach
-	if module.Annotations != nil && module.Annotations["forkspacer.com/adopted-release"] == "true" {
-		log.Info("skipping uninstall for adopted Helm release - only detaching from module",
-			"release", module.Annotations["forkspacer.com/release-name"],
-		)
+	if module.Spec.Source.ExistingHelmRelease != nil {
+		log.Info("skipping uninstall for adopted Helm release - only detaching from module")
 		return nil
 	}
 
@@ -507,18 +505,6 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 		},
 	}
 
-	// helmResourceJSON, err := json.Marshal(helmResource)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to marshal Helm resource to JSON: %w", err)
-	// }
-
-	// module.Spec.Source = batchv1.ModuleSource{
-	// 	Raw: &runtime.RawExtension{Raw: helmResourceJSON},
-	// }
-	// if err := r.Update(ctx, module); err != nil {
-	// 	return err
-	// }
-
 	helmResourceYAML, err := yaml.Marshal(helmResource)
 	if err != nil {
 		return fmt.Errorf("failed to marshal Helm resource to YAML: %w", err)
@@ -531,8 +517,6 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(ctx context.Context, module 
 	annotations := map[string]string{
 		kubernetesCons.ModuleAnnotationKeys.Resource:    string(helmResourceYAML),
 		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
-		"forkspacer.com/adopted-release":                "true",
-		"forkspacer.com/release-name":                   release.Name,
 	}
 
 	patch := client.MergeFrom(module.DeepCopy())

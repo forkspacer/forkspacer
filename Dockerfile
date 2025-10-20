@@ -34,7 +34,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
 RUN mkdir -p /internal-data && \
     chown -R 65532:65532 /internal-data
 
-FROM alpine:latest
+FROM alpine:3.22.2
 
 RUN apk add --no-cache git && \
     addgroup -g 65532 nonroot && \

@@ -299,7 +299,7 @@ func (r *ModuleReconciler) newManager(
 				metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
 			}
 
-			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName))
+			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName, helmModule.Spec.Namespace))
 			if err != nil {
 				return fmt.Errorf("failed to render Helm module spec: %v", err)
 			}
