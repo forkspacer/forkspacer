@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/forkspacer/forkspacer
-  newTag: v0.1.18
+  newTag: v0.1.19
