@@ -231,7 +231,7 @@ func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.Hel
 				return fmt.Errorf("module release name not found in manager metadata or not a string")
 			}
 
-			if err := hm.RenderSpec(hm.NewRenderData(configMap, releaseName)); err != nil {
+			if err := hm.RenderSpec(hm.NewRenderData(configMap, releaseName, hm.Spec.Namespace)); err != nil {
 				return fmt.Errorf("failed to render Helm module spec: %w", err)
 			}
 			helmModule = hm
@@ -246,66 +246,45 @@ func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.Hel
 	return helmModule, nil
 }
 
-// getModuleSourceType determines the source type string for a module
-// Returns format: "Adopted/Helm", "Managed/Git", "Managed/Repository", etc.
 func getModuleSourceType(module *batchv1.Module) string {
-	source := &module.Spec.Source
+	sourceType := "Unknown"
 
 	// Check if this was an adopted release (even if later converted to Raw)
 	if module.Spec.Source.ExistingHelmRelease != nil {
-		return "Adopted/Helm"
+		sourceType = "Helm/Adopted"
+		return sourceType
 	}
 
-	// Check annotations for previously adopted releases
-	if module.Annotations != nil {
-		if _, exists := module.Annotations["forkspacer.com/adopted-release"]; exists {
-			return "Adopted/Helm"
-		}
+	if module.Annotations == nil {
+		return sourceType
 	}
 
-	// For managed modules, determine the source type
-	if source.Raw != nil {
-		// Check if this came from an adopted release by looking at resource annotation
-		if module.Annotations != nil {
-			resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-			if resource != "" {
-				// If the resource annotation exists, it's from an adopted release that was converted
-				// This handles forked modules from adopted releases
-				var helmModule resources.HelmModule
-				configMap := make(map[string]any)
-				err := resources.HandleResource([]byte(resource), &configMap,
-					func(hm resources.HelmModule) error {
-						helmModule = hm
-						return nil
-					},
-					nil,
-				)
-				if err == nil {
-					// Determine source from the HelmModule spec
-					if helmModule.Spec.Chart.Git != nil {
-						return "Managed/Git"
-					} else if helmModule.Spec.Chart.Repo != nil {
-						return "Managed/Repository"
-					} else if helmModule.Spec.Chart.ConfigMap != nil {
-						return "Managed/ConfigMap"
-					}
-				}
+	resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
+	if resource == "" {
+		return sourceType
+	}
+
+	_ = resources.HandleResource([]byte(resource), nil,
+		func(module resources.HelmModule) error {
+			if module.Spec.Chart.Repo != nil {
+				sourceType = "Helm/Repo"
+				return nil
 			}
-		}
-		return "Managed/Raw"
-	}
+			if module.Spec.Chart.ConfigMap != nil {
+				sourceType = "Helm/ConfigMap"
+				return nil
+			}
+			if module.Spec.Chart.Git != nil {
+				sourceType = "Helm/Git"
+				return nil
+			}
+			return nil
+		},
+		func(module resources.CustomModule) error {
+			sourceType = "Custom"
+			return nil
+		},
+	)
 
-	if source.ConfigMap != nil {
-		return "Managed/ConfigMap"
-	}
-
-	if source.HttpURL != nil {
-		return "Managed/HTTP"
-	}
-
-	if source.Github != nil {
-		return "Managed/GitHub"
-	}
-
-	return "Unknown"
+	return sourceType
 }

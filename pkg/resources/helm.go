@@ -244,9 +244,10 @@ func (module *HelmModule) RenderSpec(data any) error {
 	return nil
 }
 
-func (module *HelmModule) NewRenderData(config map[string]any, releaseName string) map[string]any {
+func (module *HelmModule) NewRenderData(config map[string]any, releaseName, namespace string) map[string]any {
 	return map[string]any{
 		"config":      config,
 		"releaseName": releaseName,
+		"namespace":   namespace,
 	}
 }

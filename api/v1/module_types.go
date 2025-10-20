@@ -237,7 +237,6 @@ type ModuleStatus struct {
 
 	Phase ModulePhaseType `json:"phase"`
 
-	// Source indicates how this module is managed (e.g., "Adopted/Helm", "Managed/Git")
 	// +optional
 	Source string `json:"source,omitempty"`
 
