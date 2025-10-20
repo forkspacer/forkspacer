@@ -6,7 +6,7 @@ on:
     types: [helm-pages-deploy]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -61,6 +61,20 @@ jobs:
       - name: Create charts directory
         run: |
           make build-charts-site
+
+      - name: Upload chart to GitHub release
+        if: github.event_name == 'repository_dispatch' && steps.versions.outputs.component == 'forkspacer'
+        run: |
+          CHART_VERSION="${{ steps.versions.outputs.chart_version }}"
+          VERSION="${{ steps.versions.outputs.version }}"
+          CHART_FILE="forkspacer-${CHART_VERSION}.tgz"
+          
+          echo "📦 Uploading $CHART_FILE to release $VERSION..."
+          
+          gh release upload $VERSION $CHART_FILE --clobber
+          echo "✅ Chart uploaded to GitHub Release"
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -225,29 +225,46 @@ build-charts-site: helm-package-ci ## Create charts directory for GitHub Pages a
 	CHARTS_DIR="charts-site"; \
 	echo "📦 Preparing charts site..."; \
 	mkdir -p "$$CHARTS_DIR"
-	@echo "📥 Fetching existing charts from GitHub Pages..."
-	@if curl -fsSL https://forkspacer.github.io/forkspacer/index.yaml -o /tmp/current-index.yaml 2>/dev/null; then \
-		echo "✅ Found existing Helm repository"; \
-	else \
-		echo "ℹ️  No existing charts found (first deployment)"; \
-	fi
-	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	@echo "📥 Fetching existing charts from GitHub Releases..."
+	@REPO_OWNER="forkspacer"; \
+	REPO_NAME="forkspacer"; \
+	CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
 	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
 	CHARTS_DIR="charts-site"; \
-	if [ -f /tmp/current-index.yaml ]; then \
-		grep -oP 'https://forkspacer\.github\.io/forkspacer/forkspacer-[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?\.tgz' /tmp/current-index.yaml | sort -u | while read url; do \
-			filename=$$(basename "$$url"); \
-			if [ "$$filename" = "$$CHART_FILE" ]; then \
-				echo "  ⏭️  Skipping $$filename (will be replaced)"; \
-				continue; \
-			fi; \
-			echo "  📥 Downloading $$filename..."; \
-			if curl -fsSL "$$url" -o "$$CHARTS_DIR/$$filename"; then \
-				echo "  ✅ Downloaded $$filename"; \
-			else \
-				echo "  ⚠️  Failed to download $$filename"; \
-			fi; \
-		done; \
+	if curl -fsSL "https://api.github.com/repos/$$REPO_OWNER/$$REPO_NAME/releases" -o /tmp/releases.json 2>/dev/null; then \
+		echo "✅ Found GitHub releases"; \
+		if command -v jq >/dev/null 2>&1; then \
+			echo "🔍 Using jq for JSON parsing..."; \
+			cat /tmp/releases.json | jq -r '.[] | select(.assets[].name | test("forkspacer-.*\\.tgz")) | .assets[] | select(.name | test("forkspacer-.*\\.tgz")) | .browser_download_url' | sort -u | while read url; do \
+				filename=$$(basename "$$url"); \
+				if [ "$$filename" = "$$CHART_FILE" ]; then \
+					echo "  ⏭️  Skipping $$filename (will be replaced)"; \
+					continue; \
+				fi; \
+				echo "  📥 Downloading $$filename from GitHub Releases..."; \
+				if curl -fsSL "$$url" -o "$$CHARTS_DIR/$$filename"; then \
+					echo "  ✅ Downloaded $$filename"; \
+				else \
+					echo "  ⚠️  Failed to download $$filename"; \
+				fi; \
+			done; \
+		else \
+			echo "⚠️ jq not available, using manual parsing..."; \
+			grep -o '"browser_download_url": "[^"]*forkspacer-[^"]*\.tgz"' /tmp/releases.json | cut -d'"' -f4 | sort -u | while read url; do \
+				filename=$$(basename "$$url"); \
+				if [ "$$filename" != "$$CHART_FILE" ]; then \
+					echo "  📥 Downloading $$filename from GitHub Releases..."; \
+					if curl -fsSL "$$url" -o "$$CHARTS_DIR/$$filename"; then \
+						echo "  ✅ Downloaded $$filename"; \
+					else \
+						echo "  ⚠️  Failed to download $$filename"; \
+					fi; \
+				fi; \
+			done; \
+		fi; \
+		rm -f /tmp/releases.json; \
+	else \
+		echo "ℹ️  No GitHub releases found or API unavailable (first deployment)"; \
 	fi
 	@CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
 	CHART_FILE="forkspacer-$$CHART_VERSION.tgz"; \
@@ -256,8 +273,12 @@ build-charts-site: helm-package-ci ## Create charts directory for GitHub Pages a
 	cp "$$CHART_FILE" "$$CHARTS_DIR/"; \
 	echo "✅ Added new chart: $$CHART_FILE"
 	@CHARTS_DIR="charts-site"; \
-	echo "📄 Generating Helm repo index..."; \
-	helm repo index "$$CHARTS_DIR" --url https://forkspacer.github.io/forkspacer
+	echo "📄 Generating Helm repo index with GitHub Releases URLs..."; \
+	CHART_VERSION=$$(grep '^version:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	APP_VERSION=$$(grep '^appVersion:' helm/Chart.yaml | awk '{print $$2}' | tr -d '"' | tr -d "'"); \
+	helm repo index "$$CHARTS_DIR" --url "https://github.com/forkspacer/forkspacer/releases/download"; \
+	sed -i.bak "s|https://github.com/forkspacer/forkspacer/releases/download/forkspacer-\([0-9]\+\.[0-9]\+\.[0-9]\+\)\.tgz|https://github.com/forkspacer/forkspacer/releases/download/v\1/forkspacer-\1.tgz|g" "$$CHARTS_DIR/index.yaml"; \
+	rm -f "$$CHARTS_DIR/index.yaml.bak"
 	@CHARTS_DIR="charts-site"; \
 	if [ -f ".github/templates/helm-page.html" ]; then \
 		cp .github/templates/helm-page.html "$$CHARTS_DIR/index.html"; \
