@@ -17,7 +17,7 @@ maintainers:
     email: team@forkspacer.com
 dependencies:
   - name: api-server
-    version: "0.1.5"
+    version: "0.1.6"
     repository: "https://forkspacer.github.io/api-server"
     condition: api-server.enabled
   - name: operator-ui
