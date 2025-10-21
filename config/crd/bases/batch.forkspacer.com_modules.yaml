@@ -48,6 +48,120 @@ spec:
               may reject unrecognized values.
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
+          config:
+            items:
+              properties:
+                alias:
+                  type: string
+                boolean:
+                  properties:
+                    default:
+                      default: false
+                      type: boolean
+                    editable:
+                      default: true
+                      type: boolean
+                    required:
+                      default: false
+                      type: boolean
+                  required:
+                  - default
+                  - editable
+                  - required
+                  type: object
+                integer:
+                  properties:
+                    default:
+                      default: 0
+                      type: integer
+                    editable:
+                      default: true
+                      type: boolean
+                    max:
+                      type: integer
+                    min:
+                      type: integer
+                    required:
+                      default: false
+                      type: boolean
+                  required:
+                  - default
+                  - editable
+                  - required
+                  type: object
+                multipleOptions:
+                  properties:
+                    default:
+                      items:
+                        type: string
+                      type: array
+                    editable:
+                      default: true
+                      type: boolean
+                    max:
+                      type: integer
+                    min:
+                      type: integer
+                    required:
+                      default: false
+                      type: boolean
+                    values:
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - editable
+                  - required
+                  - values
+                  type: object
+                name:
+                  type: string
+                option:
+                  properties:
+                    default:
+                      default: ""
+                      type: string
+                    editable:
+                      default: true
+                      type: boolean
+                    required:
+                      default: false
+                      type: boolean
+                    values:
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - default
+                  - editable
+                  - required
+                  - values
+                  type: object
+                string:
+                  properties:
+                    default:
+                      default: ""
+                      type: string
+                    editable:
+                      default: true
+                      type: boolean
+                    regex:
+                      type: string
+                    required:
+                      default: false
+                      type: boolean
+                  required:
+                  - default
+                  - editable
+                  - required
+                  type: object
+              required:
+              - alias
+              - name
+              type: object
+            type: array
           kind:
             description: |-
               Kind is a string value representing the REST resource this object represents.
@@ -64,173 +178,229 @@ spec:
               config:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              createNamespace:
-                default: false
-                description: |-
-                  CreateNamespace specifies whether to create the target namespace if it doesn't exist.
-                  Similar to ArgoCD's syncOptions.CreateNamespace.
-                type: boolean
-              hibernated:
-                default: false
-                type: boolean
-              source:
+              custom:
                 properties:
-                  configMap:
+                  image:
+                    type: string
+                  imagePullSecrets:
+                    items:
+                      type: string
+                    type: array
+                  permissions:
+                    items:
+                      enum:
+                      - workspace
+                      - controller
+                      type: string
+                    type: array
+                required:
+                - image
+                type: object
+              helm:
+                properties:
+                  chart:
                     properties:
-                      key:
-                        minLength: 1
-                        type: string
-                      name:
-                        maxLength: 253
-                        minLength: 1
-                        type: string
-                      namespace:
-                        default: default
-                        maxLength: 63
-                        minLength: 1
-                        type: string
-                    required:
-                    - name
-                    - namespace
-                    type: object
-                  existingHelmRelease:
-                    properties:
-                      chartSource:
-                        description: |-
-                          ChartSource defines the Helm chart source for managing this release.
-                          Required for installation and future operations (upgrades, reconfigurations).
+                      configMap:
                         properties:
-                          configMap:
+                          key:
+                            default: chart.tgz
+                            minLength: 1
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            default: default
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                      git:
+                        properties:
+                          auth:
+                            description: Authentication credentials for private repositories
                             properties:
-                              key:
-                                minLength: 1
-                                type: string
+                              httpsSecretRef:
+                                description: |-
+                                  Reference to a Secret containing Git credentials
+                                  username and token fields
+                                properties:
+                                  name:
+                                    minLength: 1
+                                    type: string
+                                  namespace:
+                                    default: default
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - name
+                                - namespace
+                                type: object
+                            type: object
+                          path:
+                            default: /
+                            description: Path to the chart directory containing Chart.yaml
+                            minLength: 1
+                            type: string
+                          repo:
+                            description: Repository URL (https or ssh)
+                            minLength: 1
+                            type: string
+                          revision:
+                            default: main
+                            description: Git revision (branch, tag)
+                            type: string
+                        required:
+                        - path
+                        - repo
+                        - revision
+                        type: object
+                      repo:
+                        properties:
+                          auth:
+                            description: Authentication credentials for private chart
+                              repositories
+                            properties:
                               name:
-                                maxLength: 253
                                 minLength: 1
                                 type: string
                               namespace:
                                 default: default
-                                maxLength: 63
                                 minLength: 1
                                 type: string
                             required:
                             - name
                             - namespace
                             type: object
-                          git:
-                            description: Git repository containing Helm chart
-                            properties:
-                              auth:
-                                description: Authentication credentials for private
-                                  repositories
-                                properties:
-                                  httpsSecretRef:
-                                    description: |-
-                                      Reference to a Secret containing Git credentials
-                                      username and token fields
-                                    properties:
-                                      name:
-                                        maxLength: 253
-                                        minLength: 1
-                                        type: string
-                                      namespace:
-                                        default: default
-                                        maxLength: 63
-                                        minLength: 1
-                                        type: string
-                                    required:
-                                    - name
-                                    - namespace
-                                    type: object
-                                type: object
-                              path:
-                                description: Path to the chart directory containing
-                                  Chart.yaml
-                                minLength: 1
-                                type: string
-                              repo:
-                                description: Repository URL (https or ssh)
-                                minLength: 1
-                                type: string
-                              revision:
-                                default: main
-                                description: Git revision (branch, tag)
-                                type: string
-                            required:
-                            - path
-                            - repo
-                            - revision
-                            type: object
-                          repository:
-                            description: Repository-based chart (e.g., from Helm repository)
-                            properties:
-                              auth:
-                                description: Authentication credentials for private
-                                  chart repositories
-                                properties:
-                                  secretRef:
-                                    description: |-
-                                      Reference to a Secret containing chart repository credentials
-                                      username and password fields for basic auth
-                                    properties:
-                                      name:
-                                        maxLength: 253
-                                        minLength: 1
-                                        type: string
-                                      namespace:
-                                        default: default
-                                        maxLength: 63
-                                        minLength: 1
-                                        type: string
-                                    required:
-                                    - name
-                                    - namespace
-                                    type: object
-                                required:
-                                - secretRef
-                                type: object
-                              chart:
-                                minLength: 1
-                                type: string
-                              url:
-                                minLength: 1
-                                type: string
-                              version:
-                                type: string
-                            required:
-                            - chart
-                            - url
-                            type: object
+                          chart:
+                            minLength: 1
+                            type: string
+                          url:
+                            minLength: 1
+                            type: string
+                          version:
+                            type: string
+                        required:
+                        - chart
+                        - url
                         type: object
+                    type: object
+                  cleanup:
+                    default:
+                      removeNamespace: false
+                      removePVCs: false
+                    properties:
+                      removeNamespace:
+                        default: false
+                        type: boolean
+                      removePVCs:
+                        default: false
+                        type: boolean
+                    required:
+                    - removeNamespace
+                    - removePVCs
+                    type: object
+                  existingRelease:
+                    properties:
                       name:
-                        maxLength: 253
                         minLength: 1
                         type: string
                       namespace:
                         default: default
-                        maxLength: 63
                         minLength: 1
                         type: string
-                      values:
-                        description: |-
-                          Values allows overriding specific values from the existing release.
-                          These values will be merged with the existing release's values.
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
                     required:
-                    - chartSource
                     - name
                     - namespace
                     type: object
-                  github:
+                  migration:
+                    properties:
+                      configMaps:
+                        items:
+                          type: string
+                        type: array
+                      pvcs:
+                        items:
+                          type: string
+                        type: array
+                      secrets:
+                        items:
+                          type: string
+                        type: array
                     type: object
-                  httpURL:
+                  namespace:
+                    default: default
                     type: string
-                  raw:
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
+                  outputs:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          x-kubernetes-preserve-unknown-fields: true
+                        valueFrom:
+                          properties:
+                            secret:
+                              properties:
+                                key:
+                                  minLength: 1
+                                  type: string
+                                name:
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  default: default
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              - namespace
+                              type: object
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  values:
+                    items:
+                      properties:
+                        configMap:
+                          properties:
+                            key:
+                              default: values.yaml
+                              minLength: 1
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                            namespace:
+                              default: default
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          - namespace
+                          type: object
+                        file:
+                          type: string
+                        raw:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      type: object
+                    type: array
+                required:
+                - chart
+                - cleanup
+                - namespace
                 type: object
+              hibernated:
+                default: false
+                type: boolean
               workspace:
                 properties:
                   name:
@@ -248,7 +418,6 @@ spec:
                 type: object
             required:
             - hibernated
-            - source
             - workspace
             type: object
           status:

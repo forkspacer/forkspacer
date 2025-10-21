@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	"github.com/forkspacer/forkspacer/pkg/utils"
 )
 
 var _ = Describe("Module Controller", func() {
@@ -54,9 +53,6 @@ var _ = Describe("Module Controller", func() {
 						Namespace: "default",
 					},
 					Spec: batchv1.ModuleSpec{
-						Source: batchv1.ModuleSource{
-							HttpURL: utils.ToPtr("http://example.com/module"),
-						},
 						Workspace: batchv1.ModuleWorkspaceReference{
 							Name:      "test-workspace",
 							Namespace: "default",

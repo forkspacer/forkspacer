@@ -2,16 +2,10 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
-	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
-	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
@@ -107,19 +101,13 @@ func NewAPIConfig(
 				workspaceConn.SecretReference.Namespace, workspaceConn.SecretReference.Name, err)
 		}
 
-		// Use custom key if provided, otherwise use default "kubeconfig"
-		secretKey := workspaceConn.SecretReference.Key
-		if secretKey == "" {
-			secretKey = kubernetesCons.WorkspaceSecretKeys.KubeConfig
-		}
-
-		kubeconfigData, ok := secret.Data[secretKey]
+		kubeconfigData, ok := secret.Data[workspaceConn.SecretReference.Key]
 		if !ok {
 			return nil, fmt.Errorf(
 				"secret %s/%s does not contain key %s",
 				workspaceConn.SecretReference.Namespace,
 				workspaceConn.SecretReference.Name,
-				secretKey,
+				workspaceConn.SecretReference.Key,
 			)
 		}
 
@@ -177,114 +165,18 @@ func NewHelmService(
 	return helmService, nil
 }
 
-func newHelmReleaseNameFromModule(module batchv1.Module) string {
-	return module.Namespace + "-" + module.Name
-}
-
-// IsHelmModule checks if a module is a Helm module by examining its resource annotation
-func IsHelmModule(module *batchv1.Module) bool {
-	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-	if resourceAnnotation == "" {
-		return false
-	}
-
-	err := resources.HandleResource([]byte(resourceAnnotation), nil,
-		func(helmModule resources.HelmModule) error { return nil },
-		func(_ resources.CustomModule) error {
-			return errors.New("not supported")
-		},
-	)
-	return err == nil
-}
-
-// ParseHelmModule parses a Helm module from its annotations and renders its spec
-func ParseHelmModule(ctx context.Context, module *batchv1.Module) (resources.HelmModule, error) {
-	log := logf.FromContext(ctx)
-
-	resourceAnnotation := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-	if resourceAnnotation == "" {
-		return resources.HelmModule{},
-			fmt.Errorf("module %s/%s is missing resource annotation", module.Namespace, module.Name)
-	}
-
-	managerData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
-	metaData := make(managerBase.MetaData)
-	if ok && managerData != "" {
-		if err := metaData.Parse([]byte(managerData)); err != nil {
-			log.Error(err, "failed to parse manager data for module", "module", module.Name, "namespace", module.Namespace)
-		}
-	}
-
-	configMap := make(map[string]any)
-	configMapData, ok := module.Annotations[kubernetesCons.ModuleAnnotationKeys.BaseModuleConfig]
-	if ok {
-		if err := json.Unmarshal([]byte(configMapData), &configMap); err != nil {
-			log.Error(err, "failed to unmarshal module config from annotation")
-		}
-	}
-
-	var helmModule resources.HelmModule
-	err := resources.HandleResource([]byte(resourceAnnotation), &configMap,
-		func(hm resources.HelmModule) error {
-			releaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
-			if !ok {
-				return fmt.Errorf("module release name not found in manager metadata or not a string")
-			}
-
-			if err := hm.RenderSpec(hm.NewRenderData(configMap, releaseName, hm.Spec.Namespace)); err != nil {
-				return fmt.Errorf("failed to render Helm module spec: %w", err)
-			}
-			helmModule = hm
-			return nil
-		},
-		nil,
-	)
-	if err != nil {
-		return resources.HelmModule{}, err
-	}
-
-	return helmModule, nil
-}
-
 func getModuleSourceType(module *batchv1.Module) string {
-	sourceType := "Unknown"
+	if module.Spec.Helm != nil {
+		if module.Spec.Helm.ExistingRelease != nil {
+			return "Helm/Adopted"
+		}
 
-	// Check if this was an adopted release (even if later converted to Raw)
-	if module.Spec.Source.ExistingHelmRelease != nil {
-		sourceType = "Helm/Adopted"
-		return sourceType
+		return "Helm/Managed"
 	}
 
-	if module.Annotations == nil {
-		return sourceType
+	if module.Spec.Custom != nil {
+		return "Custom"
 	}
 
-	resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-	if resource == "" {
-		return sourceType
-	}
-
-	_ = resources.HandleResource([]byte(resource), nil,
-		func(module resources.HelmModule) error {
-			if module.Spec.Chart.Repo != nil {
-				sourceType = "Helm/Repo"
-				return nil
-			}
-			if module.Spec.Chart.ConfigMap != nil {
-				sourceType = "Helm/ConfigMap"
-				return nil
-			}
-			if module.Spec.Chart.Git != nil {
-				sourceType = "Helm/Git"
-				return nil
-			}
-			return nil
-		},
-		func(module resources.CustomModule) error {
-			sourceType = "Custom"
-			return nil
-		},
-	)
-
-	return sourceType
+	return "Unknown"
 }

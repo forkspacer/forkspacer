@@ -11,10 +11,10 @@ import (
 	"slices"
 	"time"
 
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
-	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/go-viper/mapstructure/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +38,7 @@ func NewModuleCustomManager(
 	ctx context.Context,
 	controllerClient client.Client,
 	apiConfig *clientcmdapi.Config,
-	customModule *resources.CustomModule,
+	customModule *batchv1.ModuleSpecCustom,
 	config map[string]any,
 	metaData base.MetaData,
 ) (base.IManager, error) {
@@ -175,7 +175,7 @@ func (m ModuleCustomManager) Resume(ctx context.Context, metaData base.MetaData)
 func (m *ModuleCustomManager) createRunnerPod(
 	ctx context.Context,
 	apiConfig *clientcmdapi.Config,
-	customModule *resources.CustomModule,
+	customModule *batchv1.ModuleSpecCustom,
 	config map[string]any,
 ) (podName, podLabel string, err error) {
 	log := logf.FromContext(ctx)
@@ -211,7 +211,7 @@ func (m *ModuleCustomManager) createRunnerPod(
 func (m *ModuleCustomManager) createRunnerSecret(
 	ctx context.Context,
 	apiConfig *clientcmdapi.Config,
-	customModule *resources.CustomModule,
+	customModule *batchv1.ModuleSpecCustom,
 	config map[string]any,
 ) (*corev1.Secret, error) {
 	log := logf.FromContext(ctx)
@@ -225,15 +225,15 @@ func (m *ModuleCustomManager) createRunnerSecret(
 		"config.json": configJSON,
 	}
 
-	for _, permission := range customModule.Spec.Permissions {
+	for _, permission := range customModule.Permissions {
 		switch permission {
-		case resources.CustomModulePermissionWorkspace:
+		case batchv1.CustomModulePermissionTypeWorkspace:
 			kubeconfig, err := clientcmd.Write(*apiConfig)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write workspace kubeconfig: %w", err)
 			}
 			data["workspace_kubeconfig"] = kubeconfig
-		case resources.CustomModulePermissionController:
+		case batchv1.CustomModulePermissionTypeController:
 		default:
 			err := fmt.Errorf("unsupported custom module permission: %s", permission)
 			log.Error(err, "encountered an unsupported permission during custom module secret generation")
@@ -262,11 +262,11 @@ func (m *ModuleCustomManager) createRunnerSecret(
 }
 
 func (m *ModuleCustomManager) buildRunnerPod(
-	customModule *resources.CustomModule,
+	customModule *batchv1.ModuleSpecCustom,
 	secretName, podLabel string,
 ) *corev1.Pod {
-	imagePullSecrets := make([]corev1.LocalObjectReference, len(customModule.Spec.ImagePullSecrets))
-	for i, imagePullSecret := range customModule.Spec.ImagePullSecrets {
+	imagePullSecrets := make([]corev1.LocalObjectReference, len(customModule.ImagePullSecrets))
+	for i, imagePullSecret := range customModule.ImagePullSecrets {
 		imagePullSecrets[i] = corev1.LocalObjectReference{Name: imagePullSecret}
 	}
 
@@ -292,7 +292,7 @@ func (m *ModuleCustomManager) buildRunnerPod(
 						},
 					},
 					Name:  "worker",
-					Image: customModule.Spec.Image,
+					Image: customModule.Image,
 					Ports: []corev1.ContainerPort{
 						{ContainerPort: 8080},
 					},
@@ -324,7 +324,7 @@ func (m *ModuleCustomManager) buildRunnerPod(
 		},
 	}
 
-	if slices.Contains(customModule.Spec.Permissions, resources.CustomModulePermissionController) {
+	if slices.Contains(customModule.Permissions, batchv1.CustomModulePermissionTypeController) {
 		pod.Spec.ServiceAccountName = "forkspacer-controller-manager"
 	}
 

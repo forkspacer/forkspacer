@@ -148,21 +148,6 @@ type WorkspaceSpec struct {
 
 	// +optional
 	AutoHibernation *WorkspaceAutoHibernation `json:"autoHibernation,omitempty"`
-
-	// NamespacePrefix prefixes all module deployment namespaces.
-	// Useful for forking workspaces to avoid resource conflicts.
-	// Example: "staging-" will deploy modules to "staging-default", "staging-database", etc.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=53
-	// +kubebuilder:validation:Pattern=`^[a-z0-9][-a-z0-9]*$`
-	NamespacePrefix string `json:"namespacePrefix,omitempty"`
-
-	// CreateNamespace specifies whether to auto-create prefixed namespaces.
-	// Only applies when NamespacePrefix is set.
-	// +optional
-	// +kubebuilder:default=false
-	CreateNamespace bool `json:"createNamespace"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

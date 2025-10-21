@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,11 +12,11 @@ import (
 	"path/filepath"
 	"time"
 
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	fileCons "github.com/forkspacer/forkspacer/pkg/constants/file"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager/base"
-	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	"github.com/go-logr/logr"
 	"github.com/go-viper/mapstructure/v2"
@@ -28,7 +29,7 @@ import (
 var _ base.IManager = ModuleHelmManager{}
 
 type ModuleHelmManager struct {
-	helmModule       *resources.HelmModule
+	helmModule       *batchv1.ModuleSpecHelm
 	helmService      *services.HelmService
 	releaseName      string
 	controllerClient client.Client
@@ -36,7 +37,7 @@ type ModuleHelmManager struct {
 }
 
 func NewModuleHelmManager(
-	helmModule *resources.HelmModule,
+	helmModule *batchv1.ModuleSpecHelm,
 	helmService *services.HelmService,
 	releaseName string,
 	controllerClient client.Client,
@@ -54,25 +55,16 @@ func NewModuleHelmManager(
 // fetchRepoAuthCredentials retrieves username and password from a secret reference
 func (m ModuleHelmManager) fetchRepoAuthCredentials(
 	ctx context.Context,
-	auth *resources.HelmModuleSpecChartRepoAuth,
+	auth *batchv1.ModuleSpecHelmChartRepoAuth,
 ) (username, password string, err error) {
-	if auth == nil || auth.SecretRef == nil {
-		return "", "", nil
-	}
-
-	secretNamespace := auth.SecretRef.Namespace
-	if secretNamespace == "" {
-		secretNamespace = "default"
-	}
-
 	secret := &corev1.Secret{}
 	if err := m.controllerClient.Get(ctx, types.NamespacedName{
-		Name:      auth.SecretRef.Name,
-		Namespace: secretNamespace,
+		Name:      auth.Name,
+		Namespace: auth.Namespace,
 	}, secret); err != nil {
 		return "", "", fmt.Errorf("failed to fetch repository auth secret %s/%s: %w",
-			secretNamespace,
-			auth.SecretRef.Name,
+			auth.Namespace,
+			auth.Name,
 			err,
 		)
 	}
@@ -85,8 +77,8 @@ func (m ModuleHelmManager) fetchRepoAuthCredentials(
 	passwordBytes, ok := secret.Data[kubernetesCons.Helm.ChartRepoAuthSecretPasswordKey]
 	if !ok {
 		return "", "", fmt.Errorf("secret %s/%s does not contain '%s' data",
-			secretNamespace,
-			auth.SecretRef.Name,
+			auth.Namespace,
+			auth.Name,
 			kubernetesCons.Helm.ChartRepoAuthSecretPasswordKey,
 		)
 	}
@@ -96,61 +88,50 @@ func (m ModuleHelmManager) fetchRepoAuthCredentials(
 }
 
 func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) error {
-	namespace := m.helmModule.Spec.Namespace
-	if namespace == "" {
-		namespace = kubernetesCons.Helm.DefaultNamespace
-	}
-
-	if m.helmModule.Spec.Chart.Repo != nil {
+	if m.helmModule.Chart.Repo != nil {
 		// Fetch repository authentication credentials if configured
-		username, password, err := m.fetchRepoAuthCredentials(ctx, m.helmModule.Spec.Chart.Repo.Auth)
-		if err != nil {
-			return err
+		var username, password string
+		if m.helmModule.Chart.Repo.Auth != nil {
+			var err error
+			username, password, err = m.fetchRepoAuthCredentials(ctx, m.helmModule.Chart.Repo.Auth)
+			if err != nil {
+				return err
+			}
 		}
 
 		if err := m.helmService.InstallFromRepository(
 			ctx,
-			m.helmModule.Spec.Chart.Repo.ChartName,
+			m.helmModule.Chart.Repo.Chart,
 			m.releaseName,
-			namespace,
-			m.helmModule.Spec.Chart.Repo.URL,
-			m.helmModule.Spec.Chart.Repo.Version,
+			m.helmModule.Namespace,
+			m.helmModule.Chart.Repo.URL,
+			m.helmModule.Chart.Repo.Version,
 			true,
-			m.helmModule.Spec.Values,
+			m.helmModule.Values,
 			username,
 			password,
 		); err != nil {
 			return err
 		}
-	} else if m.helmModule.Spec.Chart.ConfigMap != nil {
-		namespace := m.helmModule.Spec.Chart.ConfigMap.Namespace
-		if namespace == "" {
-			namespace = "default"
-		}
-
+	} else if m.helmModule.Chart.ConfigMap != nil {
 		configMap := &corev1.ConfigMap{}
 		if err := m.controllerClient.Get(ctx, types.NamespacedName{
-			Name:      m.helmModule.Spec.Chart.ConfigMap.Name,
-			Namespace: namespace,
+			Name:      m.helmModule.Chart.ConfigMap.Name,
+			Namespace: m.helmModule.Chart.ConfigMap.Namespace,
 		}, configMap); err != nil {
 			return fmt.Errorf("failed to fetch ConfigMap %s/%s: %w",
-				namespace,
-				m.helmModule.Spec.Chart.ConfigMap.Name,
+				m.helmModule.Chart.ConfigMap.Namespace,
+				m.helmModule.Chart.ConfigMap.Name,
 				err,
 			)
 		}
 
-		key := m.helmModule.Spec.Chart.ConfigMap.Key
-		if key == "" {
-			key = kubernetesCons.Helm.ChartConfigMapKey
-		}
-
-		chartData, ok := configMap.BinaryData[key]
+		chartData, ok := configMap.BinaryData[m.helmModule.Chart.ConfigMap.Key]
 		if !ok {
 			return fmt.Errorf("ConfigMap %s/%s does not contain '%s' data",
-				namespace,
-				m.helmModule.Spec.Chart.ConfigMap.Name,
-				kubernetesCons.Helm.ChartConfigMapKey,
+				m.helmModule.Chart.ConfigMap.Namespace,
+				m.helmModule.Chart.ConfigMap.Name,
+				m.helmModule.Chart.ConfigMap.Key,
 			)
 		}
 
@@ -182,38 +163,28 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 		if err := m.helmService.InstallFromLocal(ctx,
 			tmpFile.Name(), // Path to the temporary chart file
 			m.releaseName,
-			namespace,
+			m.helmModule.Namespace,
 			true,
-			m.helmModule.Spec.Values,
+			m.helmModule.Values,
 		); err != nil {
 			return err
 		}
-	} else if m.helmModule.Spec.Chart.Git != nil {
-		repoURL, err := url.Parse(m.helmModule.Spec.Chart.Git.Repo)
+	} else if m.helmModule.Chart.Git != nil {
+		repoURL, err := url.Parse(m.helmModule.Chart.Git.Repo)
 		if err != nil {
 			return err
 		}
 
-		revision := "main"
-		if m.helmModule.Spec.Chart.Git.Revision != nil {
-			revision = *m.helmModule.Spec.Chart.Git.Revision
-		}
-
-		if m.helmModule.Spec.Chart.Git.Auth != nil {
-			if m.helmModule.Spec.Chart.Git.Auth.HTTPSSecretRef != nil {
-				namespace := m.helmModule.Spec.Chart.Git.Auth.HTTPSSecretRef.Namespace
-				if namespace == "" {
-					namespace = "default"
-				}
-
+		if m.helmModule.Chart.Git.Auth != nil {
+			if m.helmModule.Chart.Git.Auth.HTTPSSecretRef != nil {
 				secret := &corev1.Secret{}
 				if err := m.controllerClient.Get(ctx, types.NamespacedName{
-					Name:      m.helmModule.Spec.Chart.Git.Auth.HTTPSSecretRef.Name,
-					Namespace: namespace,
+					Name:      m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Name,
+					Namespace: m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Namespace,
 				}, secret); err != nil {
 					return fmt.Errorf("failed to fetch secret %s/%s: %w",
-						namespace,
-						m.helmModule.Spec.Chart.Git.Auth.HTTPSSecretRef.Name,
+						m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Namespace,
+						m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Name,
 						err,
 					)
 				}
@@ -222,8 +193,8 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 				token, ok := secret.Data[kubernetesCons.Helm.ChartGitAuthHTTPSSecretTokenKey]
 				if !ok {
 					return fmt.Errorf("secret %s/%s does not contain '%s' data",
-						namespace,
-						m.helmModule.Spec.Chart.Git.Auth.HTTPSSecretRef.Name,
+						m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Namespace,
+						m.helmModule.Chart.Git.Auth.HTTPSSecretRef.Name,
 						kubernetesCons.Helm.ChartGitAuthHTTPSSecretTokenKey,
 					)
 				}
@@ -253,7 +224,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 
 		cmd := exec.CommandContext(cmdCtx,
 			fileCons.GitPath, "clone", "--quiet", "--depth=1",
-			"--branch", revision,
+			"--branch", m.helmModule.Chart.Git.Revision,
 			repoURL.String(), tempDir,
 		)
 
@@ -265,11 +236,11 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 		}
 
 		if err := m.helmService.InstallFromLocal(ctx,
-			filepath.Join(tempDir, m.helmModule.Spec.Chart.Git.Path), // Path to the temporary chart directory
+			filepath.Join(tempDir, m.helmModule.Chart.Git.Path), // Path to the temporary chart directory
 			m.releaseName,
-			namespace,
+			m.helmModule.Chart.ConfigMap.Namespace,
 			true,
-			m.helmModule.Spec.Values,
+			m.helmModule.Values,
 		); err != nil {
 			return err
 		}
@@ -287,25 +258,25 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.OrderedMap[string, any] {
 	outputs := orderedmap.New[string, any]()
 
-	for _, output := range m.helmModule.Spec.Outputs {
+	for _, output := range m.helmModule.Outputs {
 		if output.Value != nil {
-			outputs.Set(output.Name, *output.Value)
+			var parsedValue any
+			if err := json.Unmarshal(output.Value.Raw, &parsedValue); err != nil {
+				m.log.Error(err, "Failed to parse output value as JSON", "outputName", output.Name)
+			} else {
+				outputs.Set(output.Name, parsedValue)
+			}
 		} else if output.ValueFrom != nil {
 			if output.ValueFrom.Secret != nil && output.ValueFrom.Secret.Name != "" && output.ValueFrom.Secret.Key != "" {
-				namespace := output.ValueFrom.Secret.Namespace
-				if namespace == "" {
-					namespace = kubernetesCons.Helm.DefaultNamespace
-				}
-
 				secretValue, err := m.helmService.GetSecretValue(ctx,
-					namespace,
+					output.ValueFrom.Secret.Namespace,
 					output.ValueFrom.Secret.Name,
 					output.ValueFrom.Secret.Key,
 				)
 				if err != nil {
 					m.log.Error(err, "Failed to get secret value for output",
 						"outputName", output.Name,
-						"secretNamespace", namespace,
+						"secretNamespace", output.ValueFrom.Secret.Namespace,
 						"secretName", output.ValueFrom.Secret.Name,
 						"secretKey", output.ValueFrom.Secret.Key,
 					)
@@ -321,23 +292,10 @@ func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.Order
 }
 
 func (m ModuleHelmManager) Uninstall(ctx context.Context, metaData base.MetaData) error {
-	removeNamespace := false
-	removePVCs := false
-
-	if m.helmModule.Spec.Cleanup != nil {
-		removeNamespace = m.helmModule.Spec.Cleanup.RemoveNamespace
-		removePVCs = m.helmModule.Spec.Cleanup.RemovePVCs
-	}
-
-	err := m.helmService.UninstallRelease(ctx,
-		m.releaseName, m.helmModule.Spec.Namespace,
-		removeNamespace, removePVCs,
+	return m.helmService.UninstallRelease(ctx,
+		m.releaseName, m.helmModule.Namespace,
+		m.helmModule.Cleanup.RemoveNamespace, m.helmModule.Cleanup.RemovePVCs,
 	)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 type ReplicaHistory struct {
@@ -347,14 +305,9 @@ type ReplicaHistory struct {
 }
 
 func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) error {
-	namespace := m.helmModule.Spec.Namespace
-	if namespace == "" {
-		namespace = kubernetesCons.Helm.DefaultNamespace
-	}
-
 	var replicaHistory ReplicaHistory
 
-	oldReplicas, err := m.helmService.ScaleDeployments(ctx, m.releaseName, namespace, 0)
+	oldReplicas, err := m.helmService.ScaleDeployments(ctx, m.releaseName, m.helmModule.Namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.Deployments = append(replicaHistory.Deployments, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
@@ -363,7 +316,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 		return err
 	}
 
-	oldReplicas, err = m.helmService.ScaleReplicaSets(ctx, m.releaseName, namespace, 0)
+	oldReplicas, err = m.helmService.ScaleReplicaSets(ctx, m.releaseName, m.helmModule.Namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.ReplicaSets = append(replicaHistory.ReplicaSets, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
@@ -372,7 +325,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 		return err
 	}
 
-	oldReplicas, err = m.helmService.ScaleStatefulSets(ctx, m.releaseName, namespace, 0)
+	oldReplicas, err = m.helmService.ScaleStatefulSets(ctx, m.releaseName, m.helmModule.Namespace, 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.StatefulSets = append(replicaHistory.StatefulSets, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
@@ -387,7 +340,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 func (m ModuleHelmManager) Resume(ctx context.Context, metaData base.MetaData) error {
 	replicaHistory, ok := metaData[managerCons.HelmMetaDataKeys.ReplicaHistory]
 	if !ok {
-		return fmt.Errorf("replica history not found in metadata for module %s", m.helmModule.ObjectMeta.Name)
+		return errors.New("replica history not found in metadata")
 	}
 
 	var parsedreplicaHistory ReplicaHistory
@@ -396,13 +349,13 @@ func (m ModuleHelmManager) Resume(ctx context.Context, metaData base.MetaData) e
 	}
 
 	if err := m.helmService.ScaleDeploymentsBack(ctx, parsedreplicaHistory.Deployments...); err != nil {
-		return fmt.Errorf("failed to scale deployments back for module %s: %w", m.helmModule.ObjectMeta.Name, err)
+		return err
 	}
 	if err := m.helmService.ScaleReplicaSetsBack(ctx, parsedreplicaHistory.ReplicaSets...); err != nil {
-		return fmt.Errorf("failed to scale replica sets back for module %s: %w", m.helmModule.ObjectMeta.Name, err)
+		return err
 	}
 	if err := m.helmService.ScaleStatefulSetsBack(ctx, parsedreplicaHistory.StatefulSets...); err != nil {
-		return fmt.Errorf("failed to scale stateful sets back for module %s: %w", m.helmModule.ObjectMeta.Name, err)
+		return err
 	}
 
 	return nil
