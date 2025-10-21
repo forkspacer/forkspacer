@@ -7,39 +7,17 @@ const (
 )
 
 var ModuleAnnotationKeys = struct {
-	Resource,
-	BaseModuleConfig,
 	ManagerData string
 }{
-	Resource:         BaseAnnotationKey + "/resource",
-	BaseModuleConfig: BaseAnnotationKey + "/base-module-config",
-	ManagerData:      BaseAnnotationKey + "/manager-data",
-}
-
-var WorkspaceSecretKeys = struct {
-	KubeConfig string
-}{
-	KubeConfig: "kubeconfig",
-}
-
-var ModuleConfigMapKeys = struct {
-	Source string
-}{
-	Source: "module.yaml",
+	ManagerData: BaseAnnotationKey + "/manager-data",
 }
 
 var Helm = struct {
-	DefaultNamespace,
-	ValuesConfigMapKey,
-	ChartConfigMapKey,
 	ChartGitAuthHTTPSSecretUsernameKey,
 	ChartGitAuthHTTPSSecretTokenKey,
 	ChartRepoAuthSecretUsernameKey,
 	ChartRepoAuthSecretPasswordKey string
 }{
-	DefaultNamespace:                   "default",
-	ValuesConfigMapKey:                 "values",
-	ChartConfigMapKey:                  "chart.tgz",
 	ChartGitAuthHTTPSSecretUsernameKey: "username",
 	ChartGitAuthHTTPSSecretTokenKey:    "token",
 	ChartRepoAuthSecretUsernameKey:     "username",

@@ -17,6 +17,18 @@ limitations under the License.
 package v1
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"slices"
+	"text/template"
+
+	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
+	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
+	"go.yaml.in/yaml/v3"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -33,191 +45,6 @@ const (
 	ModulePhaseResuming     ModulePhaseType = "resuming"
 	ModulePhaseFailed       ModulePhaseType = "failed"
 )
-
-type ModuleSourceGithubSpec struct{}
-
-type ModuleSourceConfigMapRef struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Namespace string `json:"namespace"`
-
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	Key string `json:"key,omitempty"`
-}
-
-type ModuleSourceExistingHelmReleaseRef struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Namespace string `json:"namespace"`
-
-	// ChartSource defines the Helm chart source for managing this release.
-	// Required for installation and future operations (upgrades, reconfigurations).
-	// +required
-	ChartSource ModuleSourceChartRef `json:"chartSource"`
-
-	// Values allows overriding specific values from the existing release.
-	// These values will be merged with the existing release's values.
-	// +optional
-	Values *runtime.RawExtension `json:"values,omitempty"`
-}
-
-// ModuleSourceChartRef defines a reference to a Helm chart source
-type ModuleSourceChartRef struct {
-	// +optional
-	ConfigMap *ModuleSourceConfigMapRef `json:"configMap,omitempty"`
-
-	// Repository-based chart (e.g., from Helm repository)
-	// +optional
-	Repository *ModuleSourceChartRepository `json:"repository,omitempty"`
-
-	// Git repository containing Helm chart
-	// +optional
-	Git *ModuleSourceChartGit `json:"git,omitempty"`
-}
-
-// ModuleSourceChartRepository defines a chart from a Helm repository
-type ModuleSourceChartRepository struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	URL string `json:"url"`
-
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	Chart string `json:"chart"`
-
-	// +optional
-	Version *string `json:"version,omitempty"`
-
-	// Authentication credentials for private chart repositories
-	// +optional
-	Auth *ModuleSourceChartRepositoryAuth `json:"auth,omitempty"`
-}
-
-// ModuleSourceChartGit defines a chart from a Git repository
-type ModuleSourceChartGit struct {
-	// Repository URL (https or ssh)
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	Repo string `json:"repo"`
-
-	// Path to the chart directory containing Chart.yaml
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	Path string `json:"path"`
-
-	// Git revision (branch, tag)
-	// +kubebuilder:default=main
-	Revision string `json:"revision"`
-
-	// Authentication credentials for private repositories
-	// +optional
-	Auth *ModuleSourceChartGitAuth `json:"auth,omitempty"`
-}
-
-// ModuleSourceChartGitAuth defines authentication for Git repositories
-type ModuleSourceChartGitAuth struct {
-	// Reference to a Secret containing Git credentials
-	// username and token fields
-	// +optional
-	HTTPSSecretRef *ModuleSourceChartGitAuthSecretRef `json:"httpsSecretRef"`
-
-	// SShSecretRef ModuleSourceConfigMapRef `json:"sshSecretRef"` // TODO
-}
-
-type ModuleSourceChartGitAuthSecretRef struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Namespace string `json:"namespace"`
-}
-
-// ModuleSourceChartRepositoryAuth defines authentication for Helm chart repositories
-type ModuleSourceChartRepositoryAuth struct {
-	// Reference to a Secret containing chart repository credentials
-	// username and password fields for basic auth
-	// +required
-	SecretRef *ModuleSourceChartRepositoryAuthSecretRef `json:"secretRef"`
-}
-
-type ModuleSourceChartRepositoryAuthSecretRef struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Namespace string `json:"namespace"`
-}
-
-type ModuleSource struct {
-	// +optional
-	Raw *runtime.RawExtension `json:"raw,omitempty"`
-
-	// +optional
-	ConfigMap *ModuleSourceConfigMapRef `json:"configMap,omitempty"`
-
-	// +optional
-	HttpURL *string `json:"httpURL,omitempty"`
-
-	// +optional
-	Github *ModuleSourceGithubSpec `json:"github,omitempty"`
-
-	// +optional
-	ExistingHelmRelease *ModuleSourceExistingHelmReleaseRef `json:"existingHelmRelease,omitempty"`
-}
-
-type ModuleWorkspaceReference struct {
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// +kubebuilder:default=default
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	Namespace string `json:"namespace"`
-}
-
-// ModuleSpec defines the desired state of Module
-type ModuleSpec struct {
-	// +required
-	Source ModuleSource `json:"source"`
-
-	// +required
-	Workspace ModuleWorkspaceReference `json:"workspace"`
-
-	// +optional
-	Config *runtime.RawExtension `json:"config,omitempty"`
-
-	// +kubebuilder:default=false
-	Hibernated bool `json:"hibernated"`
-
-	// CreateNamespace specifies whether to create the target namespace if it doesn't exist.
-	// Similar to ArgoCD's syncOptions.CreateNamespace.
-	// +optional
-	// +kubebuilder:default=false
-	CreateNamespace bool `json:"createNamespace"`
-}
 
 // ModuleStatus defines the observed state of Module.
 type ModuleStatus struct {
@@ -265,6 +92,9 @@ type Module struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
+	// +optional
+	Config []ConfigItem `json:"config,omitempty,omitzero"`
+
 	// spec defines the desired state of Module
 	// +required
 	Spec ModuleSpec `json:"spec"`
@@ -285,4 +115,725 @@ type ModuleList struct {
 
 func init() {
 	SchemeBuilder.Register(&Module{}, &ModuleList{})
+}
+
+type ModuleSpec struct {
+	// +optional
+	Helm *ModuleSpecHelm `json:"helm,omitempty"`
+
+	// +optional
+	Custom *ModuleSpecCustom `json:"custom,omitempty"`
+
+	// +required
+	Workspace ModuleWorkspaceReference `json:"workspace"`
+
+	// +optional
+	Config *runtime.RawExtension `json:"config,omitempty"`
+
+	// +kubebuilder:default=false
+	Hibernated bool `json:"hibernated"`
+}
+
+type ModuleWorkspaceReference struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
+}
+
+// +kubebuilder:validation:Enum=workspace;controller
+type CustomModulePermissionType string
+
+var (
+	CustomModulePermissionTypeWorkspace  CustomModulePermissionType = "workspace"
+	CustomModulePermissionTypeController CustomModulePermissionType = "controller"
+)
+
+type ModuleSpecCustom struct {
+	// +required
+	Image string `json:"image"`
+
+	// +optional
+	ImagePullSecrets []string `json:"imagePullSecrets,omitempty"`
+
+	// +optional
+	Permissions []CustomModulePermissionType `json:"permissions,omitempty"`
+}
+
+type ModuleSpecHelmChartRepoAuth struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+}
+
+type ModuleSpecHelmChartRepo struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
+
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Chart string `json:"chart"`
+
+	// +optional
+	Version *string `json:"version,omitempty"`
+
+	// Authentication credentials for private chart repositories
+	// +optional
+	Auth *ModuleSpecHelmChartRepoAuth `json:"auth,omitempty"`
+}
+
+type ModuleSpecHelmChartConfigMap struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+
+	// +kubebuilder:default=chart.tgz
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+}
+
+type ModuleSpecHelmChartGitAuthSecret struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+}
+
+type ModuleSpecHelmChartGitAuth struct {
+	// Reference to a Secret containing Git credentials
+	// username and token fields
+	// +optional
+	HTTPSSecretRef *ModuleSpecHelmChartGitAuthSecret `json:"httpsSecretRef"`
+
+	// SShSecretRef `json:"sshSecretRef"` // TODO
+}
+
+type ModuleSpecHelmChartGit struct {
+	// Repository URL (https or ssh)
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Repo string `json:"repo"`
+
+	// Path to the chart directory containing Chart.yaml
+	// +kubebuilder:default="/"
+	// +kubebuilder:validation:MinLength=1
+	Path string `json:"path"`
+
+	// Git revision (branch, tag)
+	// +kubebuilder:default=main
+	Revision string `json:"revision"`
+
+	// Authentication credentials for private repositories
+	// +optional
+	Auth *ModuleSpecHelmChartGitAuth `json:"auth,omitempty"`
+}
+
+type ModuleSpecHelmChart struct {
+	// +optional
+	Repo *ModuleSpecHelmChartRepo `json:"repo,omitempty"`
+
+	// +optional
+	ConfigMap *ModuleSpecHelmChartConfigMap `json:"configMap,omitempty"`
+
+	// +optional
+	Git *ModuleSpecHelmChartGit `json:"git,omitempty"`
+}
+
+type ModuleSpecHelmExistingRelease struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+}
+
+type ModuleSpecHelmValuesConfigMap struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+
+	// +kubebuilder:default=values.yaml
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+}
+
+type ModuleSpecHelmValues struct {
+	// +optional
+	File *string `json:"file,omitempty"`
+
+	// +optional
+	ConfigMap *ModuleSpecHelmValuesConfigMap `json:"configMap,omitempty"`
+
+	// +optional
+	Raw *runtime.RawExtension `json:"raw,omitempty"`
+}
+
+type ModuleSpecHelmOutputValueFromSecret struct {
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:default=default
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+}
+
+type ModuleSpecHelmOutputValueFrom struct {
+	// +optional
+	Secret *ModuleSpecHelmOutputValueFromSecret `json:"secret,omitempty"`
+}
+
+type ModuleSpecHelmOutput struct {
+	// +required
+	Name string `json:"name"`
+
+	// +optional
+	Value *apiextensionsv1.JSON `json:"value,omitempty"`
+
+	// +optional
+	ValueFrom *ModuleSpecHelmOutputValueFrom `json:"valueFrom,omitempty"`
+}
+
+type ModuleSpecHelmCleanup struct {
+	// +kubebuilder:default=false
+	RemoveNamespace bool `json:"removeNamespace"`
+
+	// +kubebuilder:default=false
+	RemovePVCs bool `json:"removePVCs"`
+}
+
+type ModuleSpecHelmMigration struct {
+	// +optional
+	PVCs []string `json:"pvcs,omitempty"`
+
+	// +optional
+	ConfigMaps []string `json:"configMaps,omitempty"`
+
+	// +optional
+	Secrets []string `json:"secrets,omitempty"`
+}
+
+type ModuleSpecHelm struct {
+	// +optional
+	ExistingRelease *ModuleSpecHelmExistingRelease `json:"existingRelease,omitempty"`
+
+	// +required
+	Chart ModuleSpecHelmChart `json:"chart"`
+
+	// +kubebuilder:default="default"
+	Namespace string `json:"namespace"`
+
+	// +optional
+	Values []ModuleSpecHelmValues `json:"values,omitempty"`
+
+	// +optional
+	Outputs []ModuleSpecHelmOutput `json:"outputs,omitempty"`
+
+	// +kubebuilder:default={removeNamespace: false, removePVCs: false}
+	Cleanup ModuleSpecHelmCleanup `json:"cleanup"`
+
+	// +optional
+	Migration ModuleSpecHelmMigration `json:"migration"`
+}
+
+type ConfigItemSpecInteger struct {
+	// +kubebuilder:default=false
+	Required bool `json:"required"`
+
+	// +kubebuilder:default=0
+	Default int `json:"default"`
+
+	// +optional
+	Min *int `json:"min,omitempty"`
+
+	// +optional
+	Max *int `json:"max,omitempty"`
+
+	// +kubebuilder:default=true
+	Editable bool `json:"editable"`
+}
+
+func (spec ConfigItemSpecInteger) Validate(input *any) (int, error) {
+	if input == nil {
+		if spec.Required {
+			return spec.Default, fmt.Errorf("a value is required for this integer field")
+		}
+
+		return spec.Default, nil
+	}
+
+	if !spec.Editable {
+		return spec.Default, fmt.Errorf("this integer field is not editable")
+	}
+
+	var val int
+	switch v := (*input).(type) {
+	case int:
+		val = v
+	case float64:
+		val = int(v)
+	default:
+		return spec.Default, fmt.Errorf("input is not an integer")
+	}
+
+	if spec.Min != nil && val < *spec.Min {
+		return spec.Default, fmt.Errorf("value %d is less than minimum %d", val, *spec.Min)
+	}
+
+	if spec.Max != nil && val > *spec.Max {
+		return spec.Default, fmt.Errorf("value %d is greater than maximum %d", val, *spec.Max)
+	}
+
+	return val, nil
+}
+
+type ConfigItemSpecBoolean struct {
+	// +kubebuilder:default=false
+	Required bool `json:"required"`
+
+	// +kubebuilder:default=false
+	Default bool `json:"default"`
+
+	// +kubebuilder:default=true
+	Editable bool `json:"editable"`
+}
+
+func (spec ConfigItemSpecBoolean) Validate(input *any) (bool, error) {
+	if input == nil {
+		if spec.Required {
+			return spec.Default, fmt.Errorf("a value is required for this boolean field")
+		}
+
+		return spec.Default, nil
+	}
+
+	if !spec.Editable {
+		return spec.Default, fmt.Errorf("this boolean field is not editable")
+	}
+
+	val, ok := (*input).(bool)
+	if !ok {
+		return spec.Default, fmt.Errorf("input is not a boolean")
+	}
+
+	return val, nil
+}
+
+type ConfigItemSpecString struct {
+	// +kubebuilder:default=false
+	Required bool `json:"required"`
+
+	// +kubebuilder:default=""
+	Default string `json:"default"`
+
+	// +optional
+	Regex *string `json:"regex,omitempty"`
+
+	// +kubebuilder:default=true
+	Editable bool `json:"editable"`
+}
+
+func (spec ConfigItemSpecString) Validate(input *any) (string, error) {
+	if input == nil {
+		if spec.Required {
+			return spec.Default, fmt.Errorf("a value is required for this string field")
+		}
+
+		return spec.Default, nil
+	}
+
+	if !spec.Editable {
+		return spec.Default, fmt.Errorf("this string field is not editable")
+	}
+
+	val, ok := (*input).(string)
+	if !ok {
+		return spec.Default, fmt.Errorf("input is not a string")
+	}
+
+	if spec.Regex != nil {
+		var re *regexp.Regexp
+		re, err := regexp.Compile(*spec.Regex)
+		if err != nil {
+			return spec.Default, fmt.Errorf("invalid regex pattern: %w", err)
+		}
+
+		if !re.MatchString(val) {
+			return spec.Default, fmt.Errorf("value '%s' does not match the required regex pattern", val)
+		}
+	}
+
+	return val, nil
+}
+
+type ConfigItemSpecOption struct {
+	// +kubebuilder:default=false
+	Required bool `yaml:"required" json:"required"`
+
+	// +kubebuilder:default=""
+	Default string `yaml:"default" json:"default"`
+
+	// +required
+	// +kubebuilder:validation:MinItems=1
+	Values []string `yaml:"values" json:"values"`
+
+	// +kubebuilder:default=true
+	Editable bool `yaml:"editable" json:"editable"`
+}
+
+func (spec ConfigItemSpecOption) Validate(input *any) (string, error) {
+	if input == nil {
+		if spec.Required {
+			return spec.Default, fmt.Errorf("a value is required for this option field")
+		}
+
+		return spec.Default, nil
+	}
+
+	if !spec.Editable {
+		return spec.Default, fmt.Errorf("this option field is not editable")
+	}
+
+	val, ok := (*input).(string)
+	if !ok {
+		return spec.Default, fmt.Errorf("input is not a string")
+	}
+
+	if !slices.Contains(spec.Values, val) {
+		return spec.Default, fmt.Errorf("invalid value '%s', must be one of %v", val, spec.Values)
+	}
+
+	return val, nil
+}
+
+type ConfigItemSpecMultipleOptions struct {
+	// +kubebuilder:default=false
+	Required bool `yaml:"required" json:"required"`
+
+	// +optional
+	Default []string `yaml:"default" json:"default,omitempty"`
+
+	// +required
+	// +kubebuilder:validation:MinItems=1
+	Values []string `yaml:"values" json:"values"`
+
+	// +optional
+	Min *int `json:"min,omitempty"`
+
+	// +optional
+	Max *int `json:"max,omitempty"`
+
+	// +kubebuilder:default=true
+	Editable bool `yaml:"editable" json:"editable"`
+}
+
+func (spec ConfigItemSpecMultipleOptions) Validate(input *any) ([]string, error) {
+	if input == nil {
+		if spec.Required {
+			return spec.Default, fmt.Errorf("a value is required for this multiple options field")
+		}
+
+		return spec.Default, nil
+	}
+
+	if !spec.Editable {
+		return spec.Default, fmt.Errorf("this multiple options field is not editable")
+	}
+
+	val, ok := (*input).([]string)
+	if !ok {
+		return spec.Default, fmt.Errorf("input is not an string array")
+	}
+
+	if len(val) == 0 && spec.Required {
+		return spec.Default, fmt.Errorf("a value is required for this multiple options field")
+	}
+
+	for _, item := range val {
+		if !slices.Contains(spec.Values, item) {
+			return spec.Default, fmt.Errorf("invalid option '%s', must be one of %v", item, spec.Values)
+		}
+	}
+
+	return val, nil
+}
+
+type ConfigItem struct {
+	// +required
+	Name string `json:"name"`
+
+	// +required
+	Alias string `json:"alias"`
+
+	// +optional
+	Integer *ConfigItemSpecInteger `json:"integer,omitempty"`
+
+	// +optional
+	Boolean *ConfigItemSpecBoolean `json:"boolean,omitempty"`
+
+	// +optional
+	String *ConfigItemSpecString `json:"string,omitempty"`
+
+	// +optional
+	Option *ConfigItemSpecOption `json:"option,omitempty"`
+
+	// +optional
+	MultipleOptions *ConfigItemSpecMultipleOptions `json:"multipleOptions,omitempty"`
+}
+
+// RenderHelmSpec renders the Helm spec with config values and releaseName
+func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
+	if m.Spec.Helm == nil {
+		return nil, fmt.Errorf("module does not have a Helm spec")
+	}
+
+	// Get and validate config
+	outputConfig, err := m.getValidatedConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get or generate release name
+	releaseName, err := m.NewHelmReleaseName()
+	if err != nil {
+		return nil, err
+	}
+
+	// Render the spec
+	renderedSpec, err := renderSpecWithTypePreservation(
+		m.Spec.Helm,
+		map[string]any{
+			"config":      outputConfig,
+			"releaseName": releaseName,
+			"namespace":   m.Namespace,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render Helm spec: %w", err)
+	}
+
+	return renderedSpec, nil
+}
+
+// RenderCustomSpec renders the Custom spec with config values
+func (m *Module) RenderCustomSpec() (*ModuleSpecCustom, error) {
+	if m.Spec.Custom == nil {
+		return nil, fmt.Errorf("module does not have a Custom spec")
+	}
+
+	// Get and validate config
+	outputConfig, err := m.getValidatedConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Render the spec
+	renderedSpec, err := renderSpecWithTypePreservation(
+		m.Spec.Custom,
+		map[string]any{
+			"config": outputConfig,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render Custom spec: %w", err)
+	}
+
+	return renderedSpec, nil
+}
+
+// getValidatedConfig validates and processes the module config
+func (m *Module) getValidatedConfig() (map[string]any, error) {
+	var inputConfig map[string]any
+	if m.Spec.Config != nil && m.Spec.Config.Raw != nil {
+		if err := json.Unmarshal(m.Spec.Config.Raw, &inputConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal module config: %w", err)
+		}
+	}
+
+	outputConfig := make(map[string]any)
+	for _, config := range m.Config {
+		var val *any
+		inputVal, ok := inputConfig[config.Alias]
+		if ok {
+			val = &inputVal
+		}
+
+		var err error
+		if config.Integer != nil {
+			outputConfig[config.Alias], err = config.Integer.Validate(val)
+			if err != nil {
+				return nil, fmt.Errorf("failed to validate integer config for alias %q: %w", config.Alias, err)
+			}
+		} else if config.Boolean != nil {
+			outputConfig[config.Alias], err = config.Boolean.Validate(val)
+			if err != nil {
+				return nil, fmt.Errorf("failed to validate boolean config for alias %q: %w", config.Alias, err)
+			}
+		} else if config.String != nil {
+			outputConfig[config.Alias], err = config.String.Validate(val)
+			if err != nil {
+				return nil, fmt.Errorf("failed to validate string config for alias %q: %w", config.Alias, err)
+			}
+		} else if config.Option != nil {
+			outputConfig[config.Alias], err = config.Option.Validate(val)
+			if err != nil {
+				return nil, fmt.Errorf("failed to validate option config for alias %q: %w", config.Alias, err)
+			}
+		} else if config.MultipleOptions != nil {
+			outputConfig[config.Alias], err = config.MultipleOptions.Validate(val)
+			if err != nil {
+				return nil, fmt.Errorf("failed to validate multiple options config for alias %q: %w", config.Alias, err)
+			}
+		} else {
+			return nil, fmt.Errorf("unknown config type for alias %q", config.Alias)
+		}
+	}
+
+	return outputConfig, nil
+}
+
+// NewHelmReleaseName generates or retrieves a unique Helm release name for this module
+// It stores the release name in the module's metadata annotations
+func (m *Module) NewHelmReleaseName() (string, error) {
+	// Initialize annotations if not present
+	if m.Annotations == nil {
+		m.Annotations = make(map[string]string)
+	}
+
+	// Parse existing metadata
+	managerData, ok := m.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
+	metaData := make(managerBase.MetaData)
+	if ok && managerData != "" {
+		if err := metaData.Parse([]byte(managerData)); err != nil {
+			return "", fmt.Errorf("failed to parse manager metadata: %w", err)
+		}
+	}
+
+	// Check if release name already exists
+	if releaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName]; ok {
+		if releaseNameStr, ok := releaseName.(string); ok && releaseNameStr != "" {
+			return releaseNameStr, nil
+		}
+	}
+
+	// Generate new unique release name
+	releaseName := m.Namespace + "-" + m.Name
+
+	// Save to metadata
+	metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
+	m.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
+
+	return releaseName, nil
+}
+
+func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
+	var zero T
+
+	// Marshal to interface{} to work with raw YAML structure
+	specBytes, err := yaml.Marshal(spec)
+	if err != nil {
+		return zero, err
+	}
+
+	var specInterface any
+	if err = yaml.Unmarshal(specBytes, &specInterface); err != nil {
+		return zero, err
+	}
+
+	// Recursively process the interface structure
+	renderedInterface, err := renderInterface(specInterface, data)
+	if err != nil {
+		return zero, err
+	}
+
+	// Marshal back to bytes and unmarshal to struct
+	renderedBytes, err := yaml.Marshal(renderedInterface)
+	if err != nil {
+		return zero, err
+	}
+
+	var renderedSpec T
+	if err = yaml.Unmarshal(renderedBytes, &renderedSpec); err != nil {
+		return zero, err
+	}
+
+	return renderedSpec, nil
+}
+
+func renderInterface(v any, data any) (any, error) {
+	switch val := v.(type) {
+	case map[string]any:
+		result := make(map[string]any)
+		for k, v := range val {
+			rendered, err := renderInterface(v, data)
+			if err != nil {
+				return nil, err
+			}
+			result[k] = rendered
+		}
+		return result, nil
+	case []any:
+		result := make([]any, len(val))
+		for i, v := range val {
+			rendered, err := renderInterface(v, data)
+			if err != nil {
+				return nil, err
+			}
+			result[i] = rendered
+		}
+		return result, nil
+	case string:
+		// Only process strings that contain template syntax
+		if bytes.Contains([]byte(val), []byte("{{")) && bytes.Contains([]byte(val), []byte("}}")) {
+			tmpl, err := template.New("").Parse(val)
+			if err != nil {
+				return nil, err
+			}
+
+			var buf bytes.Buffer
+			if err = tmpl.Execute(&buf, data); err != nil {
+				return nil, err
+			}
+
+			rendered := buf.String()
+
+			// Try to parse as YAML to preserve types (numbers, booleans, etc.)
+			var parsedValue any
+			if err := yaml.Unmarshal([]byte(rendered), &parsedValue); err == nil {
+				return parsedValue, nil
+			}
+
+			return rendered, nil
+		}
+		return val, nil
+	default:
+		return val, nil
+	}
 }

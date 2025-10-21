@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	"github.com/forkspacer/forkspacer/pkg/resources"
+	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -29,6 +28,7 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"sigs.k8s.io/yaml"
 )
 
 type helmConfigFlags struct {
@@ -137,7 +137,7 @@ func (service HelmService) InstallFromRepository(
 	chartName, releaseName, namespace, repoURL string,
 	version *string,
 	wait bool,
-	helmValues []resources.HelmValues,
+	helmValues []batchv1.ModuleSpecHelmValues,
 	username, password string,
 ) error {
 	// Create a namespace-specific action configuration to avoid using the shared one with hardcoded "default"
@@ -201,7 +201,7 @@ func (service HelmService) InstallFromLocal(
 	ctx context.Context,
 	chartPath, releaseName, namespace string,
 	wait bool,
-	helmValues []resources.HelmValues,
+	helmValues []batchv1.ModuleSpecHelmValues,
 ) error {
 	// Create a namespace-specific action configuration to avoid using the shared one with hardcoded "default"
 	actionConfig := new(action.Configuration)
@@ -553,7 +553,7 @@ func (service HelmService) ScaleStatefulSetsBack(
 
 func (service HelmService) MergeHelmValues(
 	ctx context.Context,
-	helmValues []resources.HelmValues,
+	helmValues []batchv1.ModuleSpecHelmValues,
 ) (map[string]any, error) {
 	valuesSlice := make([]map[string]any, 0)
 
@@ -570,41 +570,38 @@ func (service HelmService) MergeHelmValues(
 		}
 
 		if helmValue.ConfigMap != nil && helmValue.ConfigMap.Name != "" {
-			configMapNamespace := helmValue.ConfigMap.Namespace
-			if configMapNamespace == "" {
-				configMapNamespace = "default"
-			}
-
 			configMap, err := service.kubernetesClient.
 				CoreV1().
-				ConfigMaps(configMapNamespace).
+				ConfigMaps(helmValue.ConfigMap.Namespace).
 				Get(ctx, helmValue.ConfigMap.Name, metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf(
 					"failed to get ConfigMap '%s' in namespace '%s': %w",
-					helmValue.ConfigMap.Name, configMapNamespace, err,
+					helmValue.ConfigMap.Name, helmValue.ConfigMap.Namespace, err,
 				)
 			}
 
-			key := helmValue.ConfigMap.Key
-			if key == "" {
-				key = kubernetesCons.Helm.ValuesConfigMapKey
-			}
-
-			if configMapValues := configMap.Data[key]; configMapValues != "" {
+			if configMapValues := configMap.Data[helmValue.ConfigMap.Key]; configMapValues != "" {
 				parsedConfigMapValues, err := chartutil.ReadValues([]byte(configMapValues))
 				if err != nil {
 					return nil, fmt.Errorf(
 						"failed to read values from ConfigMap '%s' in namespace '%s': %w",
-						helmValue.ConfigMap.Name, configMapNamespace, err,
+						helmValue.ConfigMap.Name, helmValue.ConfigMap.Namespace, err,
 					)
 				}
 				valuesSlice = append(valuesSlice, parsedConfigMapValues)
 			}
 		}
 
-		if len(helmValue.Raw) > 0 {
-			valuesSlice = append(valuesSlice, helmValue.Raw)
+		if helmValue.Raw != nil && len(helmValue.Raw.Raw) > 0 {
+			var rawValues map[string]any
+			if err := yaml.Unmarshal(helmValue.Raw.Raw, &rawValues); err != nil {
+				return nil, fmt.Errorf(
+					"failed to unmarshal raw helm values: %w",
+					err,
+				)
+			}
+			valuesSlice = append(valuesSlice, rawValues)
 		}
 	}
 
@@ -620,18 +617,14 @@ func (service HelmService) MergeHelmValues(
 }
 
 func (service HelmService) GetSecretValue(ctx context.Context, namespace, name, key string) (string, error) {
-	if namespace == "" {
-		namespace = "default"
-	}
-
 	secret, err := service.kubernetesClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get secret '%s' in namespace '%s': %w", name, namespace, err)
 	}
 
 	secretValue, ok := secret.Data[key]
 	if !ok {
-		return "", fmt.Errorf("")
+		return "", fmt.Errorf("key '%s' not found in secret '%s' in namespace '%s'", key, name, namespace)
 	}
 
 	return string(secretValue), nil

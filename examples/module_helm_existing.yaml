@@ -1,0 +1,85 @@
+apiVersion: batch.forkspacer.com/v1
+kind: Module
+metadata:
+  name: redis
+  namespace: default
+
+# config:
+#   - name: "Redis Version"
+#     alias: "version"
+#     option:
+#       editable: true
+#       required: false
+#       default: "21.2.9"
+#       values:
+#         - "21.2.9"
+#         - "21.2.7"
+#         - "21.2.6"
+
+#   - name: "Replica Count"
+#     alias: "replicaCount"
+#     integer:
+#       editable: true
+#       required: false
+#       default: 1
+#       min: 0
+#       max: 5
+
+spec:
+  helm:
+    chart:
+      repo:
+        url: https://charts.bitnami.com/bitnami
+        chart: redis
+        version: "22.0.7"
+
+    existingRelease:
+      name: redis
+
+    namespace: default
+
+    values:
+      # - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
+      - raw:
+          replica:
+            replicaCount: 1
+          # image:
+          #   repository: bitnamilegacy/redis
+          # global:
+          #   security:
+          #     allowInsecureImages: true
+
+    # outputs:
+    #   - name: "Redis Hostname"
+    #     value: "redis-master.default"
+    #   - name: "Redis Username"
+    #     value: "default"
+    #   - name: "Redis Password"
+    #     valueFrom:
+    #       secret:
+    #         name: "{{.releaseName}}"
+    #         key: redis-password
+    #         namespace: default
+    #   - name: "Redis Port"
+    #     value: 6379
+
+    cleanup:
+      # removeNamespace: true
+      removePVCs: true
+
+    migration:
+      pvcs:
+        - "redis-data-{{.releaseName}}-master-0"
+      # configMaps:
+      #   - ""
+      # secrets:
+      #   - "{{.releaseName}}"
+
+  workspace:
+    name: default
+
+  hibernated: false
+
+  config:
+    version: 21.2.7
+    replicaCount: 0

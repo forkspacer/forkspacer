@@ -2,14 +2,15 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	"github.com/forkspacer/forkspacer/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -103,6 +104,11 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 		"chartRepo", chartRepo,
 		"chartVersion", chartVersion)
 
+	valuesBytes, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("failed to marshal vcluster values: %w", err)
+	}
+
 	if err := helmService.InstallFromRepository(
 		ctx,
 		chartName,
@@ -111,7 +117,7 @@ func (r *WorkspaceReconciler) installVCluster(ctx context.Context, workspace *ba
 		chartRepo,
 		&chartVersion,
 		true, // wait for vcluster to be ready
-		[]resources.HelmValues{{Raw: values}},
+		[]batchv1.ModuleSpecHelmValues{{Raw: &runtime.RawExtension{Raw: valuesBytes}}},
 		"", // no username for public vcluster repo
 		"", // no password for public vcluster repo
 	); err != nil {

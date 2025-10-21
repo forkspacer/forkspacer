@@ -8,13 +8,12 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	"github.com/forkspacer/forkspacer/pkg/resources"
+	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
+	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/yaml"
 )
 
 func (r *WorkspaceReconciler) forkWorkspace(
@@ -40,17 +39,6 @@ func (r *WorkspaceReconciler) forkWorkspace(
 				module.Namespace, module.Name, module.Status.Phase,
 			)
 		}
-
-		// For ExistingHelmRelease modules, verify the annotation exists
-		if module.Spec.Source.ExistingHelmRelease != nil {
-			resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-			if resource == "" {
-				return fmt.Errorf(
-					"source module %s/%s with ExistingHelmRelease source is missing required annotation, cannot fork yet, will retry",
-					module.Namespace, module.Name,
-				)
-			}
-		}
 	}
 
 	const maxNameLength = 253
@@ -71,8 +59,10 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					Name:        moduleName + "-" + timestamp,
 					Annotations: make(map[string]string),
 				},
+				Config: module.Config,
 				Spec: batchv1.ModuleSpec{
-					Source: module.Spec.Source,
+					Helm:   module.Spec.Helm,
+					Custom: module.Spec.Custom,
 					Workspace: batchv1.ModuleWorkspaceReference{
 						Name:      destWorkspace.Name,
 						Namespace: destWorkspace.Namespace,
@@ -81,53 +71,10 @@ func (r *WorkspaceReconciler) forkWorkspace(
 					Hibernated: module.Spec.Hibernated,
 				},
 			}
-			if newModule.Spec.Source.ExistingHelmRelease != nil {
-				resource := module.Annotations[kubernetesCons.ModuleAnnotationKeys.Resource]
-				if resource == "" {
-					log.Error(errors.New("missing Helm release resource annotation"),
-						"Annotation containing raw Helm release YAML is missing for module with ExistingHelmRelease source",
-						"module_name", module.Name,
-						"module_namespace", module.Namespace,
-					)
-					return
-				}
 
-				// Apply namespace prefix if specified
-				resourceData := []byte(resource)
-				if destWorkspace.Spec.NamespacePrefix != "" {
-					resourceData, err = r.applyNamespacePrefix(resourceData, destWorkspace.Spec.NamespacePrefix)
-					if err != nil {
-						log.Error(err,
-							"Failed to apply namespace prefix to module resource",
-							"module_name", module.Name,
-							"module_namespace", module.Namespace,
-							"prefix", destWorkspace.Spec.NamespacePrefix,
-						)
-						return
-					}
-				}
-
-				resourceJSON, err := yaml.YAMLToJSON(resourceData)
-				if err != nil {
-					log.Error(err,
-						"Failed to parse resource annotation YAML to JSON",
-						"module_name", module.Name,
-						"module_namespace", module.Namespace,
-					)
-					return
-				}
-
-				newModule.Spec.Source.Raw = &runtime.RawExtension{Raw: resourceJSON}
-				newModule.Spec.Source.ExistingHelmRelease = nil
-				newModule.Spec.Source.ConfigMap = nil
-				newModule.Spec.Source.Github = nil
-				newModule.Spec.Source.HttpURL = nil
+			if newModule.Spec.Helm != nil && newModule.Spec.Helm.ExistingRelease != nil {
+				newModule.Spec.Helm.ExistingRelease = nil
 				newModule.Spec.Config = nil
-			}
-
-			// Set createNamespace flag if workspace has it enabled
-			if destWorkspace.Spec.CreateNamespace {
-				newModule.Spec.CreateNamespace = true
 			}
 
 			if err = r.Create(ctx, newModule); err != nil {
@@ -211,21 +158,23 @@ func (r *WorkspaceReconciler) migrateModuleData(
 	log := logf.FromContext(ctx)
 
 	// Only Helm modules support data migration
-	if !IsHelmModule(sourceModule) || !IsHelmModule(destModule) {
+	if sourceModule.Spec.Helm == nil {
 		return nil
 	}
 
-	// Parse source Helm module
-	sourceHelmModule, err := ParseHelmModule(ctx, sourceModule)
+	// Render the Helm specs to get actual resource names (not templates)
+	sourceHelmModule, err := sourceModule.RenderHelmSpec()
 	if err != nil {
-		return fmt.Errorf("failed to parse source Helm module: %w", err)
+		return fmt.Errorf("failed to render source module Helm spec: %w", err)
+	}
+
+	destHelmModule, err := destModule.RenderHelmSpec()
+	if err != nil {
+		return fmt.Errorf("failed to render destination module Helm spec: %w", err)
 	}
 
 	// Check if PVC migration is enabled
-	if sourceHelmModule.Spec.Migration == nil ||
-		sourceHelmModule.Spec.Migration.PVC == nil ||
-		!sourceHelmModule.Spec.Migration.PVC.Enabled ||
-		len(sourceHelmModule.Spec.Migration.PVC.Names) == 0 {
+	if len(sourceHelmModule.Migration.PVCs) == 0 {
 		return nil
 	}
 
@@ -258,12 +207,6 @@ func (r *WorkspaceReconciler) migrateModuleData(
 		}
 	}()
 
-	// Parse destination Helm module
-	destHelmModule, err := ParseHelmModule(ctx, destModule)
-	if err != nil {
-		return fmt.Errorf("failed to parse destination Helm module: %w", err)
-	}
-
 	// Perform PVC migration
 	if err := r.migratePVCs(ctx, sourceHelmModule, destHelmModule, sourceWorkspace, destWorkspace); err != nil {
 		return fmt.Errorf("failed to migrate PVCs: %w", err)
@@ -287,16 +230,12 @@ func (r *WorkspaceReconciler) migrateModuleData(
 // migratePVCs handles the migration of PVCs from source to destination module
 func (r *WorkspaceReconciler) migratePVCs(
 	ctx context.Context,
-	sourceHelmModule, destHelmModule resources.HelmModule,
+	sourceHelmModule, destHelmModule *batchv1.ModuleSpecHelm,
 	sourceWorkspace, destWorkspace *batchv1.Workspace,
 ) error {
 	log := logf.FromContext(ctx)
 
-	// Check if PVC migration is enabled
-	if sourceHelmModule.Spec.Migration == nil ||
-		sourceHelmModule.Spec.Migration.PVC == nil ||
-		!sourceHelmModule.Spec.Migration.PVC.Enabled ||
-		len(sourceHelmModule.Spec.Migration.PVC.Names) == 0 {
+	if len(sourceHelmModule.Migration.PVCs) == 0 {
 		return nil
 	}
 
@@ -316,16 +255,16 @@ func (r *WorkspaceReconciler) migratePVCs(
 	}
 
 	// Migrate each PVC
-	for i, sourcePVCName := range sourceHelmModule.Spec.Migration.PVC.Names {
+	for i, sourcePVCName := range sourceHelmModule.Migration.PVCs {
 		if err := pvcMigrationService.MigratePVC(ctx,
-			sourceKubeConfig, sourcePVCName, sourceHelmModule.Spec.Namespace,
-			destKubeConfig, destHelmModule.Spec.Migration.PVC.Names[i], destHelmModule.Spec.Namespace,
+			sourceKubeConfig, sourcePVCName, sourceHelmModule.Namespace,
+			destKubeConfig, destHelmModule.Migration.PVCs[i], destHelmModule.Namespace,
 		); err != nil {
 			log.Error(err, "failed to migrate PVC",
 				"sourcePVC", sourcePVCName,
-				"sourceNamespace", sourceHelmModule.Spec.Namespace,
-				"destinationPVC", destHelmModule.Spec.Migration.PVC.Names[i],
-				"destinationNamespace", destHelmModule.Spec.Namespace)
+				"sourceNamespace", sourceHelmModule.Namespace,
+				"destinationPVC", destHelmModule.Migration.PVCs[i],
+				"destinationNamespace", destHelmModule.Namespace)
 		}
 	}
 
@@ -335,17 +274,13 @@ func (r *WorkspaceReconciler) migratePVCs(
 // migrateSecrets handles the migration of Secrets from source to destination module
 func (r *WorkspaceReconciler) migrateSecrets(
 	ctx context.Context,
-	sourceHelmModule, destHelmModule resources.HelmModule,
+	sourceHelmModule, destHelmModule *batchv1.ModuleSpecHelm,
 	sourceWorkspace, destWorkspace *batchv1.Workspace,
 	destModule *batchv1.Module,
 ) error {
 	log := logf.FromContext(ctx)
 
-	// Check if Secret migration is enabled
-	if sourceHelmModule.Spec.Migration == nil ||
-		sourceHelmModule.Spec.Migration.Secret == nil ||
-		!sourceHelmModule.Spec.Migration.Secret.Enabled ||
-		len(sourceHelmModule.Spec.Migration.Secret.Names) == 0 {
+	if len(sourceHelmModule.Migration.Secrets) == 0 {
 		return nil
 	}
 
@@ -364,21 +299,25 @@ func (r *WorkspaceReconciler) migrateSecrets(
 		return fmt.Errorf("failed to get source kubeconfig: %w", err)
 	}
 
-	// Generate destination release name
-	destReleaseName := newHelmReleaseNameFromModule(*destModule)
+	managerData, ok := destModule.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
+	metaData := make(managerBase.MetaData)
+	if ok && managerData != "" {
+		_ = metaData.Parse([]byte(managerData))
+	}
+	destReleaseName, _ := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
 
 	// Migrate each Secret
-	for i, sourceSecretName := range sourceHelmModule.Spec.Migration.Secret.Names {
+	for i, sourceSecretName := range sourceHelmModule.Migration.Secrets {
 		if err := secretMigrationService.MigrateSecret(ctx,
-			sourceKubeConfig, sourceSecretName, sourceHelmModule.Spec.Namespace,
-			destKubeConfig, destHelmModule.Spec.Migration.Secret.Names[i], destHelmModule.Spec.Namespace,
+			sourceKubeConfig, sourceSecretName, sourceHelmModule.Namespace,
+			destKubeConfig, destHelmModule.Migration.Secrets[i], destHelmModule.Namespace,
 			destReleaseName,
 		); err != nil {
 			log.Error(err, "failed to migrate Secret",
 				"sourceSecret", sourceSecretName,
-				"sourceNamespace", sourceHelmModule.Spec.Namespace,
-				"destinationSecret", destHelmModule.Spec.Migration.Secret.Names[i],
-				"destinationNamespace", destHelmModule.Spec.Namespace)
+				"sourceNamespace", sourceHelmModule.Namespace,
+				"destinationSecret", destHelmModule.Migration.Secrets[i],
+				"destinationNamespace", destHelmModule.Namespace)
 		}
 	}
 
@@ -388,16 +327,12 @@ func (r *WorkspaceReconciler) migrateSecrets(
 // migrateConfigMaps handles the migration of ConfigMaps from source to destination module
 func (r *WorkspaceReconciler) migrateConfigMaps(
 	ctx context.Context,
-	sourceHelmModule, destHelmModule resources.HelmModule,
+	sourceHelmModule, destHelmModule *batchv1.ModuleSpecHelm,
 	sourceWorkspace, destWorkspace *batchv1.Workspace,
 ) error {
 	log := logf.FromContext(ctx)
 
-	// Check if ConfigMap migration is enabled
-	if sourceHelmModule.Spec.Migration == nil ||
-		sourceHelmModule.Spec.Migration.ConfigMap == nil ||
-		!sourceHelmModule.Spec.Migration.ConfigMap.Enabled ||
-		len(sourceHelmModule.Spec.Migration.ConfigMap.Names) == 0 {
+	if len(sourceHelmModule.Migration.ConfigMaps) == 0 {
 		return nil
 	}
 
@@ -417,16 +352,16 @@ func (r *WorkspaceReconciler) migrateConfigMaps(
 	}
 
 	// Migrate each ConfigMap
-	for i, sourceConfigMapName := range sourceHelmModule.Spec.Migration.ConfigMap.Names {
+	for i, sourceConfigMapName := range sourceHelmModule.Migration.ConfigMaps {
 		if err := configMapMigrationService.MigrateConfigMap(ctx,
-			sourceKubeConfig, sourceConfigMapName, sourceHelmModule.Spec.Namespace,
-			destKubeConfig, destHelmModule.Spec.Migration.ConfigMap.Names[i], destHelmModule.Spec.Namespace,
+			sourceKubeConfig, sourceConfigMapName, sourceHelmModule.Namespace,
+			destKubeConfig, destHelmModule.Migration.ConfigMaps[i], destHelmModule.Namespace,
 		); err != nil {
 			log.Error(err, "failed to migrate ConfigMap",
 				"sourceConfigMap", sourceConfigMapName,
-				"sourceNamespace", sourceHelmModule.Spec.Namespace,
-				"destinationConfigMap", destHelmModule.Spec.Migration.ConfigMap.Names[i],
-				"destinationNamespace", destHelmModule.Spec.Namespace)
+				"sourceNamespace", sourceHelmModule.Namespace,
+				"destinationConfigMap", destHelmModule.Migration.ConfigMaps[i],
+				"destinationNamespace", destHelmModule.Namespace)
 		}
 	}
 
@@ -434,31 +369,31 @@ func (r *WorkspaceReconciler) migrateConfigMaps(
 }
 
 // applyNamespacePrefix applies a namespace prefix to module resources
-func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix string) ([]byte, error) {
-	configMap := make(map[string]any)
-	var updatedData []byte
+// func (r *WorkspaceReconciler) applyNamespacePrefix(moduleData []byte, prefix string) ([]byte, error) {
+// 	configMap := make(map[string]any)
+// 	var updatedData []byte
 
-	// Parse the module to extract and modify the namespace
-	err := resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			helmModule.Spec.Namespace = prefix + helmModule.Spec.Namespace
-			data, err := yaml.Marshal(helmModule)
-			if err != nil {
-				return fmt.Errorf("failed to marshal updated Helm module: %w", err)
-			}
-			updatedData = data
-			return nil
-		},
-		func(customModule resources.CustomModule) error {
-			// Custom modules don't have a namespace field
-			// No prefix needed for custom modules
-			updatedData = moduleData
-			return nil
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply namespace prefix: %w", err)
-	}
+// 	// Parse the module to extract and modify the namespace
+// 	err := resources.HandleResource(moduleData, true, &configMap,
+// 		func(helmModule resources.HelmModule) error {
+// 			helmModule.Spec.Namespace = prefix + helmModule.Spec.Namespace
+// 			data, err := yaml.Marshal(helmModule)
+// 			if err != nil {
+// 				return fmt.Errorf("failed to marshal updated Helm module: %w", err)
+// 			}
+// 			updatedData = data
+// 			return nil
+// 		},
+// 		func(customModule resources.CustomModule) error {
+// 			// Custom modules don't have a namespace field
+// 			// No prefix needed for custom modules
+// 			updatedData = moduleData
+// 			return nil
+// 		},
+// 	)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to apply namespace prefix: %w", err)
+// 	}
 
-	return updatedData, nil
-}
+// 	return updatedData, nil
+// }

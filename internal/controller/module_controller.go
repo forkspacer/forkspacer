@@ -39,7 +39,6 @@ import (
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
-	"github.com/forkspacer/forkspacer/pkg/resources"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
@@ -280,54 +279,55 @@ func (r *ModuleReconciler) newManager(
 	ctx context.Context,
 	module *batchv1.Module,
 	workspaceConnection *batchv1.WorkspaceConnection,
-	moduleData []byte,
 	metaData managerBase.MetaData,
 	configMap map[string]any,
 ) (managerBase.IManager, error) {
 	log := logf.FromContext(ctx)
-
 	var iManager managerBase.IManager
 
-	err := resources.HandleResource(moduleData, &configMap,
-		func(helmModule resources.HelmModule) error {
-			var releaseName string
-			metaDataReleaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName]
-			if ok {
-				releaseName = metaDataReleaseName.(string)
-			} else {
-				releaseName = newHelmReleaseNameFromModule(*module)
-				metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
-			}
+	if module.Spec.Helm != nil {
+		// Render the Helm spec with config values and releaseName
+		renderedHelmSpec, err := module.RenderHelmSpec()
+		if err != nil {
+			return nil, fmt.Errorf("failed to render Helm spec: %w", err)
+		}
 
-			err := helmModule.RenderSpec(helmModule.NewRenderData(configMap, releaseName, helmModule.Spec.Namespace))
-			if err != nil {
-				return fmt.Errorf("failed to render Helm module spec: %v", err)
-			}
+		releaseName, _ := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
 
-			helmService, err := r.newHelmService(ctx, workspaceConnection)
-			if err != nil {
-				return err
-			}
+		helmService, err := r.newHelmService(ctx, workspaceConnection)
+		if err != nil {
+			return nil, err
+		}
 
-			iManager, err = manager.NewModuleHelmManager(&helmModule, helmService, releaseName, r.Client, logf.FromContext(ctx))
-			if err != nil {
-				return fmt.Errorf("failed to install Helm module: %w", err)
-			}
-			return nil
-		},
-		func(customModule resources.CustomModule) error {
-			apiConfig, err := r.newAPIConfig(ctx, workspaceConnection)
-			if err != nil {
-				return fmt.Errorf("failed to create Kubernetes config: %w", err)
-			}
+		iManager, err = manager.NewModuleHelmManager(
+			renderedHelmSpec,
+			helmService,
+			releaseName,
+			r.Client,
+			logf.FromContext(ctx),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to install Helm module: %w", err)
+		}
+	} else if module.Spec.Custom != nil {
+		// Render the Custom spec with config values
+		renderedCustomSpec, err := module.RenderCustomSpec()
+		if err != nil {
+			return nil, fmt.Errorf("failed to render Custom spec: %w", err)
+		}
 
-			iManager, err = manager.NewModuleCustomManager(ctx, r.Client, apiConfig, &customModule, configMap, metaData)
-			if err != nil {
-				return fmt.Errorf("failed to install Custom module: %w", err)
-			}
-			return nil
-		},
-	)
+		apiConfig, err := r.newAPIConfig(ctx, workspaceConnection)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Kubernetes config: %w", err)
+		}
+
+		iManager, err = manager.NewModuleCustomManager(ctx, r.Client, apiConfig, renderedCustomSpec, configMap, metaData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to install Custom module: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("module spec must define either Helm or Custom configuration")
+	}
 
 	patch := client.MergeFrom(module.DeepCopy())
 	utils.UpdateMap(&module.Annotations, map[string]string{
@@ -337,7 +337,7 @@ func (r *ModuleReconciler) newManager(
 		log.Error(err, "failed to patch module with manager data", "module", module.Name, "namespace", module.Namespace)
 	}
 
-	return iManager, err
+	return iManager, nil
 }
 
 func (r *ModuleReconciler) newHelmService(

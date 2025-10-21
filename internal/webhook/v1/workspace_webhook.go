@@ -22,7 +22,6 @@ import (
 	"time"
 
 	cronCons "github.com/forkspacer/forkspacer/pkg/constants/cron"
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -357,18 +356,12 @@ func validateWorkspaceKubeconfigInSecret(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Use custom key if provided, otherwise use default "kubeconfig"
-	secretKey := secretReference.Key
-	if secretKey == "" {
-		secretKey = kubernetesCons.WorkspaceSecretKeys.KubeConfig
-	}
-
-	kubeconfigData, exists := secret.Data[secretKey]
+	kubeconfigData, exists := secret.Data[secretReference.Key]
 	if !exists {
 		allErrs = append(allErrs, field.Required(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
 			fmt.Sprintf("secret %s/%s must contain a %q field",
-				secretReference.Namespace, secretReference.Name, secretKey),
+				secretReference.Namespace, secretReference.Name, secretReference.Key),
 		))
 		return allErrs
 	}
@@ -378,7 +371,7 @@ func validateWorkspaceKubeconfigInSecret(
 			field.NewPath("spec").Child("connection").Child("secretReference"),
 			secretReference,
 			fmt.Sprintf("%q field in secret %s/%s cannot be empty",
-				secretKey, secretReference.Namespace, secretReference.Name),
+				secretReference.Key, secretReference.Namespace, secretReference.Name),
 		))
 		return allErrs
 	}
@@ -390,7 +383,7 @@ func validateWorkspaceKubeconfigInSecret(
 			secretReference,
 			fmt.Sprintf(
 				"%q field in secret %s/%s is not a valid kubeconfig: %v",
-				secretKey, secretReference.Namespace, secretReference.Name, err,
+				secretReference.Key, secretReference.Namespace, secretReference.Name, err,
 			),
 		))
 	}

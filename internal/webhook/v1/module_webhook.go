@@ -18,11 +18,8 @@ package v1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -74,7 +70,17 @@ func (d *ModuleCustomDefaulter) Default(_ context.Context, obj runtime.Object) e
 	}
 	modulelog.Info("Defaulting for Module", "name", module.GetName())
 
-	// TODO(user): fill in your defaulting logic.
+	// Generate and persist the Helm release name if this is a Helm module
+	if module.Spec.Helm != nil {
+		if _, err := module.NewHelmReleaseName(); err != nil {
+			return fmt.Errorf("failed to generate Helm release name: %w", err)
+		}
+
+		// Set ExistingRelease namespace to match Helm namespace if adopting an existing release
+		if module.Spec.Helm.ExistingRelease != nil {
+			module.Spec.Helm.Namespace = module.Spec.Helm.ExistingRelease.Namespace
+		}
+	}
 
 	return nil
 }
@@ -139,15 +145,6 @@ func (v *ModuleCustomValidator) ValidateUpdate(
 		)
 	}
 
-	allErrs := validateModule(ctx, v.Client, newModule)
-
-	if len(allErrs) > 0 {
-		return nil, apierrors.NewInvalid(
-			schema.GroupKind{Group: "batch.forkspacer.com", Kind: "Module"},
-			newModule.Name, allErrs,
-		)
-	}
-
 	return nil, nil
 }
 
@@ -177,135 +174,15 @@ func validateModule(ctx context.Context, c client.Client, module *batchv1.Module
 func validateModuleSpec(ctx context.Context, c client.Client, module *batchv1.Module) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if err := validateModuleSource(ctx, module.Spec.Source, c, field.NewPath("spec").Child("source")); err != nil {
-		allErrs = append(allErrs, err)
-	}
-
 	if errs := validateModuleWorkspace(ctx, c, module); errs != nil {
 		allErrs = append(allErrs, errs...)
 	}
 
-	return allErrs
-}
-
-func validateModuleSource(
-	ctx context.Context,
-	moduleSource batchv1.ModuleSource,
-	c client.Client,
-	fldPath *field.Path,
-) *field.Error {
-	if moduleSource.Raw != nil {
-		return nil
-	} else if moduleSource.ConfigMap != nil {
-		configMap := &corev1.ConfigMap{}
-		err := c.Get(ctx, k8sTypes.NamespacedName{
-			Name:      moduleSource.ConfigMap.Name,
-			Namespace: moduleSource.ConfigMap.Namespace,
-		}, configMap)
-
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return field.Invalid(
-					field.NewPath("spec").Child("source").Child("configMap"),
-					moduleSource.ConfigMap,
-					fmt.Sprintf("secret %s/%s not found", moduleSource.ConfigMap.Namespace, moduleSource.ConfigMap.Name),
-				)
-			}
-			return field.InternalError(
-				field.NewPath("spec").Child("source").Child("configMap"),
-				fmt.Errorf("failed to validate ConfigMap reference: %v", err),
-			)
-		}
-
-		key := moduleSource.ConfigMap.Key
-		if key == "" {
-			key = kubernetesCons.ModuleConfigMapKeys.Source
-		}
-
-		configMapData := configMap.Data[key]
-		if len(configMapData) == 0 {
-			return field.Required(
-				field.NewPath("spec").Child("source").Child("configMap"),
-				fmt.Sprintf(
-					"ConfigMap %s/%s must contain a 'module.yaml' field",
-					moduleSource.ConfigMap.Namespace, moduleSource.ConfigMap.Name,
-				),
-			)
-		}
-
-		return nil
-	} else if moduleSource.HttpURL != nil {
-		moduleURLParsed, err := url.Parse(*moduleSource.HttpURL)
-		if err != nil {
-			return field.Invalid(fldPath, *moduleSource.HttpURL, err.Error())
-		}
-
-		switch moduleURLParsed.Scheme {
-		case "http", "https":
-		default:
-			return field.Invalid(
-				fldPath.Child("httpURL"),
-				*moduleSource.HttpURL,
-				fmt.Sprintf("unsupported Http URL scheme, got '%s'", moduleURLParsed.Scheme),
-			)
-		}
-		return nil
-	} else if moduleSource.Github != nil {
-		return field.Invalid(
-			fldPath.Child("github"),
-			moduleSource.Github,
-			"'github' module source type is not yet supported",
-		)
-	} else if moduleSource.ExistingHelmRelease != nil {
-		ref := moduleSource.ExistingHelmRelease
-
-		// Validate that at least one chart source is specified
-		chartSourceCount := 0
-		if ref.ChartSource.Repository != nil {
-			chartSourceCount++
-		}
-		if ref.ChartSource.ConfigMap != nil {
-			chartSourceCount++
-		}
-		if ref.ChartSource.Git != nil {
-			chartSourceCount++
-		}
-
-		if chartSourceCount == 0 {
-			return field.Required(
-				fldPath.Child("existingHelmRelease").Child("chartSource"),
-				"at least one of 'repository', 'configMap', or 'git' must be specified",
-			)
-		}
-
-		if chartSourceCount > 1 {
-			return field.Invalid(
-				fldPath.Child("existingHelmRelease").Child("chartSource"),
-				ref.ChartSource,
-				"only one of 'repository', 'configMap', or 'git' can be specified",
-			)
-		}
-
-		// Validate values field if provided
-		if ref.Values != nil && ref.Values.Raw != nil {
-			var testValues map[string]any
-			if err := json.Unmarshal(ref.Values.Raw, &testValues); err != nil {
-				return field.Invalid(
-					fldPath.Child("existingHelmRelease").Child("values"),
-					string(ref.Values.Raw),
-					fmt.Sprintf("values must be valid JSON: %v", err),
-				)
-			}
-		}
-
-		return nil
-	} else {
-		return field.Invalid(
-			fldPath,
-			moduleSource,
-			"exactly one of 'raw', 'configMap', 'httpURL', or 'existingHelmRelease' must be specified",
-		)
+	if errs := validateModuleHelmChart(module); errs != nil {
+		allErrs = append(allErrs, errs...)
 	}
+
+	return allErrs
 }
 
 func validateModuleWorkspace(ctx context.Context, c client.Client, module *batchv1.Module) field.ErrorList {
@@ -336,20 +213,51 @@ func validateModuleWorkspace(ctx context.Context, c client.Client, module *batch
 	return allErrs
 }
 
+func validateModuleHelmChart(module *batchv1.Module) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Only validate if this is a Helm module
+	if module.Spec.Helm == nil {
+		return allErrs
+	}
+
+	chart := &module.Spec.Helm.Chart
+	chartPath := field.NewPath("spec").Child("helm").Child("chart")
+
+	// Count how many chart sources are specified
+	sourceCount := 0
+	if chart.Repo != nil {
+		sourceCount++
+	}
+	if chart.ConfigMap != nil {
+		sourceCount++
+	}
+	if chart.Git != nil {
+		sourceCount++
+	}
+
+	// Exactly one source must be specified
+	if sourceCount == 0 {
+		allErrs = append(allErrs, field.Required(
+			chartPath,
+			"must specify exactly one of: repo, configMap, or git",
+		))
+	} else if sourceCount > 1 {
+		allErrs = append(allErrs, field.Invalid(
+			chartPath,
+			chart,
+			"must specify exactly one of: repo, configMap, or git (multiple sources specified)",
+		))
+	}
+
+	return allErrs
+}
+
 func validateModuleImmutableUpdateFields(oldModule, newModule *batchv1.Module) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if oldModule == nil || newModule == nil {
 		return allErrs
-	}
-
-	if !cmp.Equal(oldModule.Spec.Source, newModule.Spec.Source) {
-		allErrs = append(allErrs,
-			field.Invalid(
-				field.NewPath("spec").Child("source"),
-				newModule.Spec.Source, "field is immutable",
-			),
-		)
 	}
 
 	if !cmp.Equal(oldModule.Spec.Workspace, newModule.Spec.Workspace) {
@@ -368,6 +276,76 @@ func validateModuleImmutableUpdateFields(oldModule, newModule *batchv1.Module) f
 				newModule.Spec.Config, "field is immutable",
 			),
 		)
+	}
+
+	// =================================== Helm ===================================
+	if oldModule.Spec.Helm == nil && newModule.Spec.Helm != nil {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("helm"),
+				newModule.Spec.Helm, "field cannot be added once the object is created",
+			),
+		)
+	} else if oldModule.Spec.Helm != nil && newModule.Spec.Helm == nil {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("helm"),
+				newModule.Spec.Helm, "field cannot be removed once the object is created",
+			),
+		)
+	} else if oldModule.Spec.Helm != nil && newModule.Spec.Helm != nil {
+		if !cmp.Equal(oldModule.Spec.Helm.ExistingRelease, newModule.Spec.Helm.ExistingRelease) {
+			allErrs = append(allErrs,
+				field.Invalid(
+					field.NewPath("spec").Child("helm").Child("existingRelease"),
+					newModule.Spec.Helm.ExistingRelease, "field is immutable",
+				),
+			)
+		}
+
+		if !cmp.Equal(oldModule.Spec.Helm.Namespace, newModule.Spec.Helm.Namespace) {
+			allErrs = append(allErrs,
+				field.Invalid(
+					field.NewPath("spec").Child("helm").Child("namespace"),
+					newModule.Spec.Helm.Namespace, "field is immutable",
+				),
+			)
+		}
+
+		if !cmp.Equal(oldModule.Spec.Helm.Outputs, newModule.Spec.Helm.Outputs) {
+			allErrs = append(allErrs,
+				field.Invalid(
+					field.NewPath("spec").Child("helm").Child("outputs"),
+					newModule.Spec.Helm.Outputs, "field is immutable",
+				),
+			)
+		}
+	}
+
+	// =================================== Custom Module ===================================
+	if oldModule.Spec.Custom == nil && newModule.Spec.Custom != nil {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("custom"),
+				newModule.Spec.Custom, "field cannot be added once the object is created",
+			),
+		)
+	} else if oldModule.Spec.Custom != nil && newModule.Spec.Custom == nil {
+		allErrs = append(allErrs,
+			field.Invalid(
+				field.NewPath("spec").Child("custom"),
+				newModule.Spec.Custom, "field cannot be removed once the object is created",
+			),
+		)
+	} else if oldModule.Spec.Custom != nil && newModule.Spec.Custom != nil {
+		if !cmp.Equal(oldModule.Spec.Custom.Image, newModule.Spec.Custom.Image) {
+			allErrs = append(allErrs,
+				field.Invalid(
+					field.NewPath("spec").Child("custom").Child("image"),
+					newModule.Spec.Custom.Image, "field is immutable",
+				),
+			)
+		}
 	}
 
 	return allErrs
