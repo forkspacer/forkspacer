@@ -346,6 +346,12 @@ type ModuleSpecHelm struct {
 	// +required
 	Chart ModuleSpecHelmChart `json:"chart"`
 
+	// Namespace for the Helm release.
+	// IMPORTANT: When programmatically accessing this field, always use ModuleSpecHelm.GetNamespace()
+	// instead of accessing this field directly. The getter returns the effective namespace:
+	// - If ExistingRelease is set, it returns ExistingRelease.Namespace
+	// - Otherwise, it returns this Namespace field
+	// This field supports Go templates (e.g., "{{ .releaseName }}", "dev-{{ .moduleName }}")
 	// +kubebuilder:default="default"
 	Namespace string `json:"namespace"`
 
@@ -360,6 +366,16 @@ type ModuleSpecHelm struct {
 
 	// +optional
 	Migration ModuleSpecHelmMigration `json:"migration"`
+}
+
+// GetNamespace returns the effective Helm namespace
+// If ExistingRelease is set, returns its namespace (for adopted releases)
+// Otherwise returns the configured Namespace (for new/forked releases)
+func (h *ModuleSpecHelm) GetNamespace() string {
+	if h.ExistingRelease != nil {
+		return h.ExistingRelease.Namespace
+	}
+	return h.Namespace
 }
 
 type ConfigItemSpecInteger struct {
@@ -625,9 +641,11 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 		return nil, err
 	}
 
-	// First, render the namespace field with releaseName and config
+	// First, get the effective namespace (from ExistingRelease or Helm.Namespace)
+	// Then render it with releaseName and config
+	effectiveNamespace := m.Spec.Helm.GetNamespace()
 	renderedNamespace, err := renderSpecWithTypePreservation(
-		m.Spec.Helm.Namespace,
+		effectiveNamespace,
 		map[string]any{
 			"config":      outputConfig,
 			"releaseName": releaseName,

@@ -75,11 +75,6 @@ func (d *ModuleCustomDefaulter) Default(_ context.Context, obj runtime.Object) e
 		if _, err := module.NewHelmReleaseName(); err != nil {
 			return fmt.Errorf("failed to generate Helm release name: %w", err)
 		}
-
-		// Set ExistingRelease namespace to match Helm namespace if adopting an existing release
-		if module.Spec.Helm.ExistingRelease != nil {
-			module.Spec.Helm.Namespace = module.Spec.Helm.ExistingRelease.Namespace
-		}
 	}
 
 	return nil
@@ -322,13 +317,18 @@ func validateModuleImmutableUpdateFields(oldModule, newModule *batchv1.Module) f
 			)
 		}
 
-		if !cmp.Equal(oldModule.Spec.Helm.Namespace, newModule.Spec.Helm.Namespace) {
-			allErrs = append(allErrs,
-				field.Invalid(
-					field.NewPath("spec").Child("helm").Child("namespace"),
-					newModule.Spec.Helm.Namespace, "field is immutable",
-				),
-			)
+		// Only validate namespace immutability when ExistingRelease is nil
+		// When ExistingRelease is set, the effective namespace comes from it,
+		// so Helm.Namespace can be changed freely (useful for forking)
+		if oldModule.Spec.Helm.ExistingRelease == nil && newModule.Spec.Helm.ExistingRelease == nil {
+			if !cmp.Equal(oldModule.Spec.Helm.Namespace, newModule.Spec.Helm.Namespace) {
+				allErrs = append(allErrs,
+					field.Invalid(
+						field.NewPath("spec").Child("helm").Child("namespace"),
+						newModule.Spec.Helm.Namespace, "field is immutable",
+					),
+				)
+			}
 		}
 
 		if !cmp.Equal(oldModule.Spec.Helm.Outputs, newModule.Spec.Helm.Outputs) {

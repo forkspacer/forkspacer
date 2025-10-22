@@ -35,8 +35,9 @@ spec:
 
     existingRelease:
       name: redis
+      namespace: default
 
-    namespace: default
+    namespace: new-default
 
     values:
       # - file: https://ftp.aykhans.me/web/client/pubshares/hB6VSdCnBCr8gFPeiMuCji/browse?path=/values.yaml
@@ -80,6 +81,6 @@ spec:
 
   hibernated: false
 
-  config:
-    version: 21.2.7
-    replicaCount: 0
+  # config:
+  #   version: 21.2.7
+  #   replicaCount: 0
