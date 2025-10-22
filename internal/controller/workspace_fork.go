@@ -52,29 +52,29 @@ func (r *WorkspaceReconciler) forkWorkspace(
 			moduleName = moduleName[:maxNameLength-len(timestamp)]
 		}
 
+		sourceCopy := module.DeepCopy()
 		go func() {
 			newModule := &batchv1.Module{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace:   module.Namespace,
+					Namespace:   sourceCopy.Namespace,
 					Name:        moduleName + "-" + timestamp,
 					Annotations: make(map[string]string),
 				},
-				Config: module.Config,
+				Config: sourceCopy.Config,
 				Spec: batchv1.ModuleSpec{
-					Helm:   module.Spec.Helm,
-					Custom: module.Spec.Custom,
+					Helm:   sourceCopy.Spec.Helm,
+					Custom: sourceCopy.Spec.Custom,
 					Workspace: batchv1.ModuleWorkspaceReference{
 						Name:      destWorkspace.Name,
 						Namespace: destWorkspace.Namespace,
 					},
-					Config:     module.Spec.Config,
-					Hibernated: module.Spec.Hibernated,
+					Config:     sourceCopy.Spec.Config,
+					Hibernated: sourceCopy.Spec.Hibernated,
 				},
 			}
 
 			if newModule.Spec.Helm != nil && newModule.Spec.Helm.ExistingRelease != nil {
 				newModule.Spec.Helm.ExistingRelease = nil
-				newModule.Spec.Config = nil
 			}
 
 			if err = r.Create(ctx, newModule); err != nil {
@@ -257,14 +257,14 @@ func (r *WorkspaceReconciler) migratePVCs(
 	// Migrate each PVC
 	for i, sourcePVCName := range sourceHelmModule.Migration.PVCs {
 		if err := pvcMigrationService.MigratePVC(ctx,
-			sourceKubeConfig, sourcePVCName, sourceHelmModule.Namespace,
-			destKubeConfig, destHelmModule.Migration.PVCs[i], destHelmModule.Namespace,
+			sourceKubeConfig, sourcePVCName, sourceHelmModule.GetNamespace(),
+			destKubeConfig, destHelmModule.Migration.PVCs[i], destHelmModule.GetNamespace(),
 		); err != nil {
 			log.Error(err, "failed to migrate PVC",
 				"sourcePVC", sourcePVCName,
-				"sourceNamespace", sourceHelmModule.Namespace,
+				"sourceNamespace", sourceHelmModule.GetNamespace(),
 				"destinationPVC", destHelmModule.Migration.PVCs[i],
-				"destinationNamespace", destHelmModule.Namespace)
+				"destinationNamespace", destHelmModule.GetNamespace())
 		}
 	}
 
@@ -309,15 +309,15 @@ func (r *WorkspaceReconciler) migrateSecrets(
 	// Migrate each Secret
 	for i, sourceSecretName := range sourceHelmModule.Migration.Secrets {
 		if err := secretMigrationService.MigrateSecret(ctx,
-			sourceKubeConfig, sourceSecretName, sourceHelmModule.Namespace,
-			destKubeConfig, destHelmModule.Migration.Secrets[i], destHelmModule.Namespace,
+			sourceKubeConfig, sourceSecretName, sourceHelmModule.GetNamespace(),
+			destKubeConfig, destHelmModule.Migration.Secrets[i], destHelmModule.GetNamespace(),
 			destReleaseName,
 		); err != nil {
 			log.Error(err, "failed to migrate Secret",
 				"sourceSecret", sourceSecretName,
-				"sourceNamespace", sourceHelmModule.Namespace,
+				"sourceNamespace", sourceHelmModule.GetNamespace(),
 				"destinationSecret", destHelmModule.Migration.Secrets[i],
-				"destinationNamespace", destHelmModule.Namespace)
+				"destinationNamespace", destHelmModule.GetNamespace())
 		}
 	}
 
@@ -354,14 +354,14 @@ func (r *WorkspaceReconciler) migrateConfigMaps(
 	// Migrate each ConfigMap
 	for i, sourceConfigMapName := range sourceHelmModule.Migration.ConfigMaps {
 		if err := configMapMigrationService.MigrateConfigMap(ctx,
-			sourceKubeConfig, sourceConfigMapName, sourceHelmModule.Namespace,
-			destKubeConfig, destHelmModule.Migration.ConfigMaps[i], destHelmModule.Namespace,
+			sourceKubeConfig, sourceConfigMapName, sourceHelmModule.GetNamespace(),
+			destKubeConfig, destHelmModule.Migration.ConfigMaps[i], destHelmModule.GetNamespace(),
 		); err != nil {
 			log.Error(err, "failed to migrate ConfigMap",
 				"sourceConfigMap", sourceConfigMapName,
-				"sourceNamespace", sourceHelmModule.Namespace,
+				"sourceNamespace", sourceHelmModule.GetNamespace(),
 				"destinationConfigMap", destHelmModule.Migration.ConfigMaps[i],
-				"destinationNamespace", destHelmModule.Namespace)
+				"destinationNamespace", destHelmModule.GetNamespace())
 		}
 	}
 

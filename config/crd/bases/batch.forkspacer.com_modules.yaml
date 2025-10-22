@@ -333,6 +333,13 @@ spec:
                     type: object
                   namespace:
                     default: default
+                    description: |-
+                      Namespace for the Helm release.
+                      IMPORTANT: When programmatically accessing this field, always use ModuleSpecHelm.GetNamespace()
+                      instead of accessing this field directly. The getter returns the effective namespace:
+                      - If ExistingRelease is set, it returns ExistingRelease.Namespace
+                      - Otherwise, it returns this Namespace field
+                      This field supports Go templates (e.g., "{{ .releaseName }}", "dev-{{ .moduleName }}")
                     type: string
                   outputs:
                     items:

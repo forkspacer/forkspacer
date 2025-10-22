@@ -103,7 +103,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 			ctx,
 			m.helmModule.Chart.Repo.Chart,
 			m.releaseName,
-			m.helmModule.Namespace,
+			m.helmModule.GetNamespace(),
 			m.helmModule.Chart.Repo.URL,
 			m.helmModule.Chart.Repo.Version,
 			true,
@@ -163,7 +163,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 		if err := m.helmService.InstallFromLocal(ctx,
 			tmpFile.Name(), // Path to the temporary chart file
 			m.releaseName,
-			m.helmModule.Namespace,
+			m.helmModule.GetNamespace(),
 			true,
 			m.helmModule.Values,
 		); err != nil {
@@ -293,7 +293,7 @@ func (m ModuleHelmManager) extractOutputs(ctx context.Context) *orderedmap.Order
 
 func (m ModuleHelmManager) Uninstall(ctx context.Context, metaData base.MetaData) error {
 	return m.helmService.UninstallRelease(ctx,
-		m.releaseName, m.helmModule.Namespace,
+		m.releaseName, m.helmModule.GetNamespace(),
 		m.helmModule.Cleanup.RemoveNamespace, m.helmModule.Cleanup.RemovePVCs,
 	)
 }
@@ -307,7 +307,7 @@ type ReplicaHistory struct {
 func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) error {
 	var replicaHistory ReplicaHistory
 
-	oldReplicas, err := m.helmService.ScaleDeployments(ctx, m.releaseName, m.helmModule.Namespace, 0)
+	oldReplicas, err := m.helmService.ScaleDeployments(ctx, m.releaseName, m.helmModule.GetNamespace(), 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.Deployments = append(replicaHistory.Deployments, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
@@ -316,7 +316,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 		return err
 	}
 
-	oldReplicas, err = m.helmService.ScaleReplicaSets(ctx, m.releaseName, m.helmModule.Namespace, 0)
+	oldReplicas, err = m.helmService.ScaleReplicaSets(ctx, m.releaseName, m.helmModule.GetNamespace(), 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.ReplicaSets = append(replicaHistory.ReplicaSets, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
@@ -325,7 +325,7 @@ func (m ModuleHelmManager) Sleep(ctx context.Context, metaData base.MetaData) er
 		return err
 	}
 
-	oldReplicas, err = m.helmService.ScaleStatefulSets(ctx, m.releaseName, m.helmModule.Namespace, 0)
+	oldReplicas, err = m.helmService.ScaleStatefulSets(ctx, m.releaseName, m.helmModule.GetNamespace(), 0)
 	for _, oldReplica := range oldReplicas {
 		replicaHistory.StatefulSets = append(replicaHistory.StatefulSets, oldReplica)
 		metaData[managerCons.HelmMetaDataKeys.ReplicaHistory] = replicaHistory
