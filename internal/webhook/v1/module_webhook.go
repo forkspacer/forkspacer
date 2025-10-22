@@ -182,6 +182,10 @@ func validateModuleSpec(ctx context.Context, c client.Client, module *batchv1.Mo
 		allErrs = append(allErrs, errs...)
 	}
 
+	if errs := validateModuleConfig(module); errs != nil {
+		allErrs = append(allErrs, errs...)
+	}
+
 	return allErrs
 }
 
@@ -247,6 +251,21 @@ func validateModuleHelmChart(module *batchv1.Module) field.ErrorList {
 			chartPath,
 			chart,
 			"must specify exactly one of: repo, configMap, or git (multiple sources specified)",
+		))
+	}
+
+	return allErrs
+}
+
+func validateModuleConfig(module *batchv1.Module) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate config by calling the existing GetValidatedConfig method
+	if _, err := module.GetValidatedConfig(); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec").Child("config"),
+			module.Spec.Config,
+			err.Error(),
 		))
 	}
 

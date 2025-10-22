@@ -27,7 +27,6 @@ import (
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
 	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
-	"go.yaml.in/yaml/v3"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -615,7 +614,7 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 	}
 
 	// Get and validate config
-	outputConfig, err := m.getValidatedConfig()
+	outputConfig, err := m.GetValidatedConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -626,13 +625,25 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 		return nil, err
 	}
 
-	// Render the spec
+	// First, render the namespace field with releaseName and config
+	renderedNamespace, err := renderSpecWithTypePreservation(
+		m.Spec.Helm.Namespace,
+		map[string]any{
+			"config":      outputConfig,
+			"releaseName": releaseName,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render Helm namespace: %w", err)
+	}
+
+	// Then render the entire spec with releaseName, config, and the rendered namespace
 	renderedSpec, err := renderSpecWithTypePreservation(
 		m.Spec.Helm,
 		map[string]any{
 			"config":      outputConfig,
 			"releaseName": releaseName,
-			"namespace":   m.Namespace,
+			"namespace":   renderedNamespace,
 		},
 	)
 	if err != nil {
@@ -649,7 +660,7 @@ func (m *Module) RenderCustomSpec() (*ModuleSpecCustom, error) {
 	}
 
 	// Get and validate config
-	outputConfig, err := m.getValidatedConfig()
+	outputConfig, err := m.GetValidatedConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -668,8 +679,8 @@ func (m *Module) RenderCustomSpec() (*ModuleSpecCustom, error) {
 	return renderedSpec, nil
 }
 
-// getValidatedConfig validates and processes the module config
-func (m *Module) getValidatedConfig() (map[string]any, error) {
+// GetValidatedConfig validates and processes the module config
+func (m *Module) GetValidatedConfig() (map[string]any, error) {
 	var inputConfig map[string]any
 	if m.Spec.Config != nil && m.Spec.Config.Raw != nil {
 		if err := json.Unmarshal(m.Spec.Config.Raw, &inputConfig); err != nil {
@@ -756,14 +767,14 @@ func (m *Module) NewHelmReleaseName() (string, error) {
 func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
 	var zero T
 
-	// Marshal to interface{} to work with raw YAML structure
-	specBytes, err := yaml.Marshal(spec)
+	// First, convert spec to JSON to properly handle apiextensionsv1.JSON types
+	specBytes, err := json.Marshal(spec)
 	if err != nil {
 		return zero, err
 	}
 
 	var specInterface any
-	if err = yaml.Unmarshal(specBytes, &specInterface); err != nil {
+	if err = json.Unmarshal(specBytes, &specInterface); err != nil {
 		return zero, err
 	}
 
@@ -773,14 +784,14 @@ func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
 		return zero, err
 	}
 
-	// Marshal back to bytes and unmarshal to struct
-	renderedBytes, err := yaml.Marshal(renderedInterface)
+	// Marshal back to JSON and unmarshal to struct
+	renderedBytes, err := json.Marshal(renderedInterface)
 	if err != nil {
 		return zero, err
 	}
 
 	var renderedSpec T
-	if err = yaml.Unmarshal(renderedBytes, &renderedSpec); err != nil {
+	if err = json.Unmarshal(renderedBytes, &renderedSpec); err != nil {
 		return zero, err
 	}
 
@@ -824,9 +835,9 @@ func renderInterface(v any, data any) (any, error) {
 
 			rendered := buf.String()
 
-			// Try to parse as YAML to preserve types (numbers, booleans, etc.)
+			// Try to parse as JSON to preserve types (numbers, booleans, etc.)
 			var parsedValue any
-			if err := yaml.Unmarshal([]byte(rendered), &parsedValue); err == nil {
+			if err := json.Unmarshal([]byte(rendered), &parsedValue); err == nil {
 				return parsedValue, nil
 			}
 
