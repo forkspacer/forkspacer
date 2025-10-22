@@ -30,8 +30,8 @@ Forkspacer provides a declarative approach to managing isolated, multi-applicati
 
 The operator introduces two primary Custom Resource Definitions (CRDs):
 
-- **Workspace**: Defines an isolated environment boundary with lifecycle policies
-- **Module**: Represents deployable application components within workspaces
+- **Workspace**: Defines an isolated environment boundary with lifecycle policies, hibernation schedules, and forking capabilities
+- **Module**: Represents deployable application components within workspaces. Modules contain their configuration schema and installation specifications (Helm charts or custom containerized modules) directly, with typed validation and template rendering
 
 ## Getting Started
 
@@ -175,7 +175,7 @@ spec:
 
 #### Deploying Applications
 
-Deploy services within the workspace:
+Deploy services within the workspace with typed configuration:
 
 ```yaml
 apiVersion: batch.forkspacer.com/v1
@@ -183,33 +183,48 @@ kind: Module
 metadata:
   name: redis
   namespace: default
+
+config:
+  - name: "Redis Version"
+    alias: "version"
+    option:
+      default: "21.2.9"
+      values:
+        - "21.2.9"
+        - "21.2.7"
+
+  - name: "Replica Count"
+    alias: "replicaCount"
+    integer:
+      default: 1
+      min: 0
+      max: 5
+
 spec:
+  helm:
+    chart:
+      repo:
+        url: https://charts.bitnami.com/bitnami
+        chart: redis
+        version: "{{.config.version}}"
+    namespace: default
+    values:
+      - raw:
+          replica:
+            replicaCount: "{{.config.replicaCount}}"
+          image:
+            repository: bitnamilegacy/redis
+          global:
+            security:
+              allowInsecureImages: true
+
   workspace:
     name: feature-branch-env
     namespace: development
 
-  source:
-    raw:
-      kind: Helm
-      metadata:
-        name: redis
-        version: "1.0.0"
-        supportedOperatorVersion: ">= 0.0.0, < 1.0.0"
-
-      spec:
-        namespace: default
-        repo: https://charts.bitnami.com/bitnami
-        chartName: redis
-        version: "21.2.9"
-        values:
-          - raw:
-              replica:
-                replicaCount: 0
-              image:
-                repository: bitnamilegacy/redis
-              global:
-                security:
-                  allowInsecureImages: true
+  config:
+    version: "21.2.9"
+    replicaCount: 1
 ```
 
 #### Managing Workspace Lifecycle
