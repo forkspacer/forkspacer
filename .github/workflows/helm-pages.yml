@@ -76,6 +76,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
 
+      - name: Update existing release with dependency changes
+        if: (github.event_name == 'repository_dispatch' && steps.versions.outputs.component != 'forkspacer') || github.event_name == 'workflow_dispatch'
+        run: |
+          # Get current chart version from Chart.yaml
+          CHART_VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          APP_VERSION=$(grep '^appVersion:' helm/Chart.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          CHART_FILE="forkspacer-${CHART_VERSION}.tgz"
+          
+          echo "📦 Updating existing release $APP_VERSION with updated dependencies..."
+          
+          # Upload the updated chart to the existing release
+          if gh release view $APP_VERSION > /dev/null 2>&1; then
+            gh release upload $APP_VERSION $CHART_FILE --clobber
+            echo "✅ Updated chart in release $APP_VERSION with new dependencies"
+          else
+            echo "⚠️ Release $APP_VERSION not found. Chart will be available via GitHub Pages only."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
