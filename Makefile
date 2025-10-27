@@ -1,5 +1,5 @@
 # Version info
-VERSION ?= v0.1.22
+VERSION ?= v0.1.23
 GIT_COMMIT ?= $(shell git rev-parse HEAD)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
