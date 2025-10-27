@@ -238,7 +238,7 @@ func (m ModuleHelmManager) Install(ctx context.Context, metaData base.MetaData) 
 		if err := m.helmService.InstallFromLocal(ctx,
 			filepath.Join(tempDir, m.helmModule.Chart.Git.Path), // Path to the temporary chart directory
 			m.releaseName,
-			m.helmModule.Chart.ConfigMap.Namespace,
+			m.helmModule.GetNamespace(),
 			true,
 			m.helmModule.Values,
 		); err != nil {
