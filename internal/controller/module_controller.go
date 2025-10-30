@@ -36,7 +36,6 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	"github.com/forkspacer/forkspacer/pkg/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/services"
@@ -286,13 +285,12 @@ func (r *ModuleReconciler) newManager(
 	var iManager managerBase.IManager
 
 	if module.Spec.Helm != nil {
-		// Render the Helm spec with config values and releaseName
 		renderedHelmSpec, err := module.RenderHelmSpec()
 		if err != nil {
 			return nil, fmt.Errorf("failed to render Helm spec: %w", err)
 		}
 
-		releaseName, _ := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
+		releaseName := module.Spec.Helm.GetReleaseName()
 
 		helmService, err := r.newHelmService(ctx, workspaceConnection)
 		if err != nil {

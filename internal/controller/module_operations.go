@@ -28,7 +28,6 @@ import (
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
 	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
 	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/utils"
 )
@@ -379,15 +378,6 @@ func (r *ModuleReconciler) adoptExistingHelmRelease(
 
 	module.Spec.Helm.Values = append(oldValues, module.Spec.Helm.Values...)
 
-	metaData := managerBase.MetaData{
-		managerCons.HelmMetaDataKeys.ReleaseName: release.Name,
-	}
-
-	annotations := map[string]string{
-		kubernetesCons.ModuleAnnotationKeys.ManagerData: metaData.String(),
-	}
-
-	utils.UpdateMap(&module.Annotations, annotations)
 	if err = r.Patch(ctx, module, patch); err != nil {
 		return fmt.Errorf("failed to patch module with adoption annotations: %w", err)
 	}

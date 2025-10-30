@@ -18,15 +18,14 @@ package v1
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"regexp"
 	"slices"
 	"text/template"
 
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
-	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -343,6 +342,10 @@ type ModuleSpecHelm struct {
 	// +optional
 	ExistingRelease *ModuleSpecHelmExistingRelease `json:"existingRelease,omitempty"`
 
+	// +optional
+	// +kubebuilder:validation:Pattern="^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$"
+	ReleaseName *string `json:"releaseName,omitempty"`
+
 	// +required
 	Chart ModuleSpecHelmChart `json:"chart"`
 
@@ -376,6 +379,17 @@ func (h *ModuleSpecHelm) GetNamespace() string {
 		return h.ExistingRelease.Namespace
 	}
 	return h.Namespace
+}
+
+// GetReleaseName returns the effective Helm release name
+// If ExistingRelease is set, returns its release name (for adopted releases)
+// Otherwise returns the configured release name (for new/forked releases)
+func (h *ModuleSpecHelm) GetReleaseName() string {
+	if h.ExistingRelease != nil {
+		return h.ExistingRelease.Name
+	}
+
+	return *h.ReleaseName
 }
 
 type ConfigItemSpecInteger struct {
@@ -623,6 +637,35 @@ type ConfigItem struct {
 	MultipleOptions *ConfigItemSpecMultipleOptions `json:"multipleOptions,omitempty"`
 }
 
+// generateBase62String generates a random string of specified length using base62 charset
+func generateBase62String(length uint) (string, error) {
+	const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	result := make([]byte, length)
+
+	for i := range length {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(base62Chars))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = base62Chars[num.Int64()]
+	}
+
+	return string(result), nil
+}
+
+// getTemplateFuncMap returns a template.FuncMap with custom functions for rendering specs
+func getTemplateFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"randBase62": func(length uint) string {
+			str, err := generateBase62String(length)
+			if err != nil {
+				return ""
+			}
+			return str
+		},
+	}
+}
+
 // RenderHelmSpec renders the Helm spec with config values and releaseName
 func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 	if m.Spec.Helm == nil {
@@ -636,10 +679,7 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 	}
 
 	// Get or generate release name
-	releaseName, err := m.NewHelmReleaseName()
-	if err != nil {
-		return nil, err
-	}
+	releaseName := m.Spec.Helm.GetReleaseName()
 
 	// First, get the effective namespace (from ExistingRelease or Helm.Namespace)
 	// Then render it with releaseName and config
@@ -650,6 +690,7 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 			"config":      outputConfig,
 			"releaseName": releaseName,
 		},
+		getTemplateFuncMap(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render Helm namespace: %w", err)
@@ -663,6 +704,7 @@ func (m *Module) RenderHelmSpec() (*ModuleSpecHelm, error) {
 			"releaseName": releaseName,
 			"namespace":   renderedNamespace,
 		},
+		getTemplateFuncMap(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render Helm spec: %w", err)
@@ -689,6 +731,7 @@ func (m *Module) RenderCustomSpec() (*ModuleSpecCustom, error) {
 		map[string]any{
 			"config": outputConfig,
 		},
+		getTemplateFuncMap(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render Custom spec: %w", err)
@@ -748,41 +791,7 @@ func (m *Module) GetValidatedConfig() (map[string]any, error) {
 	return outputConfig, nil
 }
 
-// NewHelmReleaseName generates or retrieves a unique Helm release name for this module
-// It stores the release name in the module's metadata annotations
-func (m *Module) NewHelmReleaseName() (string, error) {
-	// Initialize annotations if not present
-	if m.Annotations == nil {
-		m.Annotations = make(map[string]string)
-	}
-
-	// Parse existing metadata
-	managerData, ok := m.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
-	metaData := make(managerBase.MetaData)
-	if ok && managerData != "" {
-		if err := metaData.Parse([]byte(managerData)); err != nil {
-			return "", fmt.Errorf("failed to parse manager metadata: %w", err)
-		}
-	}
-
-	// Check if release name already exists
-	if releaseName, ok := metaData[managerCons.HelmMetaDataKeys.ReleaseName]; ok {
-		if releaseNameStr, ok := releaseName.(string); ok && releaseNameStr != "" {
-			return releaseNameStr, nil
-		}
-	}
-
-	// Generate new unique release name
-	releaseName := m.Namespace + "-" + m.Name
-
-	// Save to metadata
-	metaData[managerCons.HelmMetaDataKeys.ReleaseName] = releaseName
-	m.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData] = metaData.String()
-
-	return releaseName, nil
-}
-
-func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
+func renderSpecWithTypePreservation[T any](spec T, data any, funcMap template.FuncMap) (T, error) {
 	var zero T
 
 	// First, convert spec to JSON to properly handle apiextensionsv1.JSON types
@@ -797,7 +806,7 @@ func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
 	}
 
 	// Recursively process the interface structure
-	renderedInterface, err := renderInterface(specInterface, data)
+	renderedInterface, err := renderInterface(specInterface, data, funcMap)
 	if err != nil {
 		return zero, err
 	}
@@ -816,12 +825,12 @@ func renderSpecWithTypePreservation[T any](spec T, data any) (T, error) {
 	return renderedSpec, nil
 }
 
-func renderInterface(v any, data any) (any, error) {
+func renderInterface(v any, data any, funcMap template.FuncMap) (any, error) {
 	switch val := v.(type) {
 	case map[string]any:
 		result := make(map[string]any)
 		for k, v := range val {
-			rendered, err := renderInterface(v, data)
+			rendered, err := renderInterface(v, data, funcMap)
 			if err != nil {
 				return nil, err
 			}
@@ -831,7 +840,7 @@ func renderInterface(v any, data any) (any, error) {
 	case []any:
 		result := make([]any, len(val))
 		for i, v := range val {
-			rendered, err := renderInterface(v, data)
+			rendered, err := renderInterface(v, data, funcMap)
 			if err != nil {
 				return nil, err
 			}
@@ -841,7 +850,12 @@ func renderInterface(v any, data any) (any, error) {
 	case string:
 		// Only process strings that contain template syntax
 		if bytes.Contains([]byte(val), []byte("{{")) && bytes.Contains([]byte(val), []byte("}}")) {
-			tmpl, err := template.New("").Parse(val)
+			tmpl := template.New("")
+			if funcMap != nil {
+				tmpl = tmpl.Funcs(funcMap)
+			}
+
+			tmpl, err := tmpl.Parse(val)
 			if err != nil {
 				return nil, err
 			}
