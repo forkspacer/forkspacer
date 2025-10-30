@@ -88,9 +88,9 @@ spec:
         # TODO(user): Configure the resources accordingly based on the project requirements.
         # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
-          limits:
-            cpu: 1000m
-            memory: 1028Mi
+          # limits:
+          #   cpu: 1000m
+          #   memory: 1028Mi
           requests:
             cpu: 10m
             memory: 64Mi

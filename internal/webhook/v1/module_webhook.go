@@ -32,7 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
+	"github.com/forkspacer/forkspacer/pkg/utils"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 )
 
 // nolint:unused
@@ -71,10 +73,22 @@ func (d *ModuleCustomDefaulter) Default(_ context.Context, obj runtime.Object) e
 	modulelog.Info("Defaulting for Module", "name", module.GetName())
 
 	// Generate and persist the Helm release name if this is a Helm module
-	if module.Spec.Helm != nil {
-		if _, err := module.NewHelmReleaseName(); err != nil {
-			return fmt.Errorf("failed to generate Helm release name: %w", err)
+	if module.Spec.Helm != nil && module.Spec.Helm.ReleaseName == nil {
+		// Generate a 12-character release name that complies with DNS-1035 requirements
+		// Format: "m" (1 char) + first 11 characters of UUID (without hyphens)
+		// This ensures it starts with an alphabetic character
+		uuidStr := uuid.New().String()
+		// Remove hyphens and take first 11 characters
+		cleanUUID := ""
+		for _, ch := range uuidStr {
+			if ch != '-' {
+				cleanUUID += string(ch)
+			}
+			if len(cleanUUID) == 11 {
+				break
+			}
 		}
+		module.Spec.Helm.ReleaseName = utils.ToPtr(module.Namespace + "-" + cleanUUID)
 	}
 
 	return nil
@@ -308,6 +322,15 @@ func validateModuleImmutableUpdateFields(oldModule, newModule *batchv1.Module) f
 			),
 		)
 	} else if oldModule.Spec.Helm != nil && newModule.Spec.Helm != nil {
+		if !cmp.Equal(oldModule.Spec.Helm.ReleaseName, newModule.Spec.Helm.ReleaseName) {
+			allErrs = append(allErrs,
+				field.Invalid(
+					field.NewPath("spec").Child("helm").Child("releaseName"),
+					newModule.Spec.Helm.ReleaseName, "field is immutable",
+				),
+			)
+		}
+
 		if !cmp.Equal(oldModule.Spec.Helm.ExistingRelease, newModule.Spec.Helm.ExistingRelease) {
 			allErrs = append(allErrs,
 				field.Invalid(

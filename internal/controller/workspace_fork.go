@@ -7,9 +7,6 @@ import (
 	"time"
 
 	batchv1 "github.com/forkspacer/forkspacer/api/v1"
-	kubernetesCons "github.com/forkspacer/forkspacer/pkg/constants/kubernetes"
-	managerCons "github.com/forkspacer/forkspacer/pkg/constants/manager"
-	managerBase "github.com/forkspacer/forkspacer/pkg/manager/base"
 	"github.com/forkspacer/forkspacer/pkg/services"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,24 +38,14 @@ func (r *WorkspaceReconciler) forkWorkspace(
 		}
 	}
 
-	const maxNameLength = 253
-
 	for _, module := range modules.Items {
-		timestamp := time.Now().Format("20060102150405")
-		moduleName := module.Name
-
-		// Truncate module name if it would exceed Kubernetes name length limit
-		if len(moduleName)+len(timestamp) > maxNameLength {
-			moduleName = moduleName[:maxNameLength-len(timestamp)]
-		}
-
 		sourceCopy := module.DeepCopy()
 		go func() {
 			newModule := &batchv1.Module{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace:   sourceCopy.Namespace,
-					Name:        moduleName + "-" + timestamp,
-					Annotations: make(map[string]string),
+					Namespace:    sourceCopy.Namespace,
+					GenerateName: sourceCopy.Name + "-",
+					Annotations:  make(map[string]string),
 				},
 				Config: sourceCopy.Config,
 				Spec: batchv1.ModuleSpec{
@@ -299,12 +286,7 @@ func (r *WorkspaceReconciler) migrateSecrets(
 		return fmt.Errorf("failed to get source kubeconfig: %w", err)
 	}
 
-	managerData, ok := destModule.Annotations[kubernetesCons.ModuleAnnotationKeys.ManagerData]
-	metaData := make(managerBase.MetaData)
-	if ok && managerData != "" {
-		_ = metaData.Parse([]byte(managerData))
-	}
-	destReleaseName, _ := metaData[managerCons.HelmMetaDataKeys.ReleaseName].(string)
+	destReleaseName := destModule.Spec.Helm.GetReleaseName()
 
 	// Migrate each Secret
 	for i, sourceSecretName := range sourceHelmModule.Migration.Secrets {
