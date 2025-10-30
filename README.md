@@ -163,14 +163,7 @@ kind: Workspace
 metadata:
   name: feature-branch-env
   namespace: development
-spec:
-  type: kubernetes
-  connection:
-    type: in-cluster
-  autoHibernation:
-    enabled: true
-    schedule: "0 18 * * *"      # Sleep at 6 PM daily
-    wakeSchedule: "0 8 * * *"    # Wake at 8 AM daily
+spec: {}
 ```
 
 #### Deploying Applications
@@ -193,13 +186,6 @@ config:
         - "21.2.9"
         - "21.2.7"
 
-  - name: "Replica Count"
-    alias: "replicaCount"
-    integer:
-      default: 1
-      min: 0
-      max: 5
-
 spec:
   helm:
     chart:
@@ -211,7 +197,7 @@ spec:
     values:
       - raw:
           replica:
-            replicaCount: "{{.config.replicaCount}}"
+            replicaCount: 1
           image:
             repository: bitnamilegacy/redis
           global:
@@ -224,7 +210,6 @@ spec:
 
   config:
     version: "21.2.9"
-    replicaCount: 1
 ```
 
 #### Managing Workspace Lifecycle
