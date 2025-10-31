@@ -326,6 +326,11 @@ func (in *ModuleSpecHelm) DeepCopyInto(out *ModuleSpecHelm) {
 		*out = new(ModuleSpecHelmExistingRelease)
 		**out = **in
 	}
+	if in.ReleaseName != nil {
+		in, out := &in.ReleaseName, &out.ReleaseName
+		*out = new(string)
+		**out = **in
+	}
 	in.Chart.DeepCopyInto(&out.Chart)
 	if in.Values != nil {
 		in, out := &in.Values, &out.Values
