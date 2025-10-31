@@ -380,6 +380,9 @@ spec:
                       - name
                       type: object
                     type: array
+                  releaseName:
+                    pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$
+                    type: string
                   values:
                     items:
                       properties:
@@ -1160,7 +1163,7 @@ spec:
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - /manager
-        image: ghcr.io/forkspacer/forkspacer:v0.1.23
+        image: ghcr.io/forkspacer/forkspacer:v0.1.24
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1180,9 +1183,6 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         resources:
-          limits:
-            cpu: 1000m
-            memory: 1028Mi
           requests:
             cpu: 10m
             memory: 64Mi
