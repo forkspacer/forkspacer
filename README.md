@@ -5,6 +5,25 @@ Developers can `clone full setups`, test changes in isolation, and automatically
 
 ***Perfect for spinning dev, test, pre-prod, prod environments and teams where each developer needs a personal, forked environment from a shared baseline.***
 
+## Usage
+
+> [***Watch 2 minute VIDEO How to use Forkspacer***](https://youtu.be/_Fs86YwmDmw)
+
+> Creating workspace:
+
+![Creating Workspace](doc-assets/1.gif)
+
+> Importing helm chart:
+
+![Creating Workspace](doc-assets/2.gif)
+
+> User Interface
+
+```bash
+kubectl port-forward -n forkspacer-system svc/operator-ui 8080:80
+```
+![Creating Workspace](doc-assets/3.png)
+
 ## Installation
 
 ```bash
